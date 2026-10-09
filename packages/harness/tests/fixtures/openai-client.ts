@@ -28,7 +28,12 @@ const itemsSchema = z.array(recordSchema);
  * cleanup are needed; captured bodies retain native tool and multimodal payloads.
  */
 export function createOpenAIClientFixture(
-  options: { textDeltas?: boolean; pauseAfterText?: Promise<void> } = {},
+  options: {
+    textDeltas?: boolean;
+    pauseAfterText?: Promise<void>;
+    /** Controls the local HTTP boundary, including native history reads and writes. */
+    beforeRequest?: (request: OpenAIClientRequest) => Promise<void>;
+  } = {},
 ): OpenAIClientFixture {
   const requests: OpenAIClientRequest[] = [];
   const scripts: ScriptedResponse[] = [];
@@ -64,7 +69,9 @@ export function createOpenAIClientFixture(
       const url = new URL(request.url);
       const text = await request.text();
       const body = text ? recordSchema.parse(JSON.parse(text)) : undefined;
-      requests.push({ method: request.method, path: url.pathname, body });
+      const captured = { method: request.method, path: url.pathname, body };
+      requests.push(captured);
+      await options.beforeRequest?.(captured);
 
       if (request.method === 'POST' && url.pathname === '/responses') {
         const script = scripts.shift();

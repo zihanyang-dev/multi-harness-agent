@@ -1,14 +1,20 @@
 # Harness 接入
 
-生产执行与评测共用的原生 SDK 接入边界。依赖已安装，`src/contract.ts` 是初始契约，尚无可用 adapter。
+生产执行与评测共用的原生 SDK 接入边界。`src/contract.ts` 是公共契约，当前提供最小 OpenAI 文本会话 adapter；Pi 和 Claude 接入尚未实现。
 
 - Pi 1.1.0、OpenAI Agents SDK 0.20.0、Claude Agent SDK 0.3.295。
 - 保留官方 loop、session、compaction 和实际控制能力，不编排创作步骤。
 - 输入是有序 text / 通用 file；adapter 使用原生内容机制，不自建 loop 或媒体解释器。类型可表达不代表所有 SDK／模型都支持。
 - 公开消息不是 checkpoint；不实现跨 harness 通用上下文。
 - MCP 连接配置、工具 SDK 包装与 Skills 装配属于本包；业务工具的授权、IO 与业务规则由 host 提供。
-- Tool、MCP、Skills 是确定的必备接入边界，现在建立公共契约；当前仍无 adapter，不能宣称三个 SDK 都已支持这些能力。
+- Tool、MCP、Skills 是确定的必备接入边界，现在建立公共契约；当前 OpenAI adapter 明确拒绝这些配置，不能宣称三个 SDK 都已接入这些能力。
 - 生产入口没有默认 provider、模拟输出或自动云端调用。离线接入测试使用明确标注的模型／transport 替身。
+
+## 当前可用入口
+
+`createOpenAIHarness({ client, model, instructions? })` 由可信 host 显式装配，固定配置不混入 session 或 turn。最小实现支持有序文本输入、文本事件与结果、原生 Conversations 历史续轮、本 wrapper 内的单 writer、请求中断及等待收尾的 dispose。
+
+这是可调用的文本接入，不是完整通用 Agent 或生产恢复验收。文件输入、工具、MCP、Skills 和公开推理摘要尚未接入；请求不会被静默忽略。`cwd` 不改变普通 SDK Agent 的进程工作目录，也不授予文件系统访问。详细使用与边界见 [OpenAI 接入](src/openai/README.md)。
 
 ## 契约组织
 
