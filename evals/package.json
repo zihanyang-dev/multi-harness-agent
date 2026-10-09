@@ -1,0 +1,14 @@
+{
+  "name": "@multi-harness/evals",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@multi-harness/harness": "workspace:*",
+    "@multi-harness/sandbox": "workspace:*"
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "name": "multi-harness-agent",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.8.1",
+  "engines": {
+    "node": ">=24.21.0"
+  },
+  "devEngines": {
+    "runtime": {
+      "name": "node",
+      "version": "24.21.0",
+      "onFail": "download"
+    }
+  },
+  "scripts": {
+    "dev": "pnpm build:packages && pnpm --parallel --filter './apps/*' dev",
+    "build:packages": "pnpm --filter './packages/*' -r build",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm build:packages && pnpm -r typecheck && tsc --noEmit -p tsconfig.json",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "test": "vitest run",
+    "test:e2e": "pnpm build:packages && playwright test",
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
+    "infra:up": "docker compose --project-directory . -f deploy/compose.yaml up -d --wait",
+    "infra:down": "docker compose --project-directory . -f deploy/compose.yaml down",
+    "db:migrate": "dbmate --migrations-dir apps/server/migrations --schema-file apps/server/schema.sql up"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.15",
+    "@playwright/test": "1.64.0",
+    "@types/node": "24.19.1",
+    "dbmate": "2.36.0",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2",
+    "vitest": "5.0.3"
+  }
+}
