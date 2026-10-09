@@ -1,4 +1,5 @@
 import type { BaseEvent, Message } from '@ag-ui/core';
+
 import type { HarnessMcpServer } from './mcp.js';
 import type { HarnessSkillsOptions } from './skill.js';
 import type { HarnessTool } from './tool.js';
@@ -24,9 +25,20 @@ export interface OpenHarnessSessionOptions {
   skills?: HarnessSkillsOptions;
 }
 
-/** Initial text boundary; media inputs will be added with actual adapter verification. */
+/** Files are prepared by the host; adapters map supported parts to native SDK content. */
+export type HarnessInputPart =
+  | { type: 'text'; text: string }
+  | {
+      type: 'file';
+      /** An authorized URL or inline bytes, not a business file ID or storage client. */
+      source: URL | Uint8Array;
+      mimeType: string;
+      filename?: string;
+    };
+
+/** Preserves host input order; native support is checked by the selected adapter. */
 export interface HarnessTurnInput {
-  text: string;
+  content: readonly HarnessInputPart[];
 }
 
 /** Public output is not a portable native checkpoint. Execution failures reject the result. */

@@ -24,5 +24,9 @@
     "@modelcontextprotocol/sdk": "1.32.1",
     "@openai/agents": "0.20.0",
     "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-ai": "1.1.0",
+    "openai": "7.30.1"
   }
 }

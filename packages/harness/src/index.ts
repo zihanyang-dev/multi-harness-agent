@@ -1,6 +1,7 @@
 export type {
   HarnessCapabilities,
   HarnessId,
+  HarnessInputPart,
   HarnessProvider,
   HarnessRun,
   HarnessSession,
