@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import {
   Agent,
-  type AgentInputItem,
   type ModelSettings,
   OpenAIResponsesModel,
   type RunItem,
@@ -18,6 +17,7 @@ import type {
   HarnessTurnResult,
   OpenHarnessSessionOptions,
 } from '../contract.js';
+import { toNativeInput } from './input.js';
 import { createRunEvents, toMessages } from './output.js';
 
 /**
@@ -63,7 +63,7 @@ interface SessionState {
 }
 
 /**
- * Creates the text-only adapter around the official Runner and host-supplied SDK sessions.
+ * Creates the adapter around the official Runner, native input and text output.
  *
  * Model transport and history storage are independent. Disposing a wrapper does not clear
  * history or close host-owned connections. SDK tracing is disabled.
@@ -192,7 +192,7 @@ async function finishTurn(
       throw error;
     return { status: 'cancelled', messages: toMessages(nativeRun.newItems) };
   } finally {
-    // Native completion includes history persistence for this configured text-only Runner.
+    // Native completion includes history persistence for this configured text-output Runner.
     releaseTurn(turn, state);
   }
 }
@@ -219,14 +219,4 @@ function assertSessionOptions(options: OpenHarnessSessionOptions): void {
     throw new Error('Custom tools are not connected to the OpenAI adapter yet');
   if (options.mcpServers?.length) throw new Error('MCP is not connected to the OpenAI adapter yet');
   if (options.skills) throw new Error('Skills are not connected to the OpenAI adapter yet');
-}
-
-function toNativeInput(input: HarnessTurnInput): AgentInputItem[] {
-  const content = input.content.map((part) => {
-    // File mapping is a separate integration step; never silently remove a requested attachment.
-    if (part.type === 'file')
-      throw new Error('File input is not connected to the OpenAI adapter yet');
-    return { type: 'input_text' as const, text: part.text };
-  });
-  return [{ role: 'user', content }];
 }

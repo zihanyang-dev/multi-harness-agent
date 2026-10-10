@@ -546,7 +546,7 @@ describe('OpenAI native session', () => {
     }
   });
 
-  it('rejects an attachment before starting native work and still admits a text turn', async () => {
+  it('rejects invalid file metadata before native work and still admits a text turn', async () => {
     const fixture = createOpenAIClientFixture();
     fixture.enqueue('Answer');
     const session = await createOpenAIHarness({
@@ -562,11 +562,11 @@ describe('OpenAI native session', () => {
             {
               type: 'file',
               source: new URL('https://files.example/document.pdf'),
-              mimeType: 'application/pdf',
+              mimeType: '',
             },
           ],
         }),
-      ).rejects.toThrow(/File input/);
+      ).rejects.toThrow(/MIME media type/);
       expect(fixture.requests).toHaveLength(requestCount);
       expect(
         (await (await session.run({ content: [{ type: 'text', text: 'Continue' }] })).result)

@@ -32,7 +32,9 @@ export type HarnessInputPart =
       type: 'file';
       /** An authorized URL or inline bytes, not a business file ID or storage client. */
       source: URL | Uint8Array;
+      /** A MIME media type; native format acceptance depends on the selected adapter and model. */
       mimeType: string;
+      /** Native image content may not have a filename field; the host retains business metadata. */
       filename?: string;
     };
 

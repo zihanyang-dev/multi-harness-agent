@@ -1,6 +1,6 @@
 # Harness 接入
 
-生产执行与评测共用的原生 SDK 接入边界。`src/contract.ts` 是公共契约，当前提供最小 OpenAI 文本会话 adapter；Pi 和 Claude 接入尚未实现。
+生产执行与评测共用的原生 SDK 接入边界。`src/contract.ts` 是公共契约，当前提供 OpenAI 会话 adapter（文字／文件输入、文本输出）；Pi 和 Claude 接入尚未实现。
 
 - Pi 1.1.0、OpenAI Agents SDK 0.20.0、Claude Agent SDK 0.3.295。
 - 保留官方 loop、session、compaction 和实际控制能力，不编排创作步骤。
@@ -14,9 +14,9 @@
 
 `createOpenAIHarness({ client, model, sessions, instructions?, modelSettings? })` 由可信 host 显式装配，固定配置不混入 session 或 turn。模型服务与会话后端独立：必填的 `sessions` 通过 `open(nativeSessionId?)` 返回官方 SDK `Session`，`resumable` 声明 host 已验证的恢复能力。packages 不选择文件／数据库，不提供默认 Conversations 或内存回退；业务侧负责授权、存储与连接生命周期。原先只传 client／model 的 OpenAI 装配需要更新，公共多 harness 契约不变。
 
-最小实现支持有序文本输入、文本事件与结果、SDK 原生历史续轮、本 wrapper 内的单 writer、请求中断及等待收尾的 dispose。`resume` 取决于所选会话装配；同一 ID 重开不是跨后端迁移或任意执行 checkpoint 恢复。
+当前实现支持有序文字／文件输入、文本事件与结果、SDK 原生历史续轮、本 wrapper 内的单 writer、请求中断及等待收尾的 dispose。`resume` 取决于所选会话装配；同一 ID 重开不是跨后端迁移或任意执行 checkpoint 恢复。
 
-当前公共 adapter 已通过一次兼容网关的真实两轮文本验收：官方 MemorySession、`resumable: false`，验证流式输出、最终结果和同会话原生历史，不依赖 Conversations。这不是完整通用 Agent 或生产持久恢复验收。文件输入、工具、MCP、Skills 和公开推理摘要尚未接入；请求不会被静默忽略。`cwd` 不改变普通 SDK Agent 的进程工作目录，也不授予文件系统访问。详细使用与边界见 [OpenAI 接入](src/openai/README.md)。
+当前公共 adapter 已通过兼容网关的真实两轮文本验收，以及 PNG、PDF、DOCX、XLSX、CSV 五个合成文件的内容读取验收：官方 MemorySession、`resumable: false`，不依赖 Conversations。同一配置下的 WAV／MP4 附件收到 HTTP 400，不能宣称已支持音视频理解。通用文件映射通过离线 SDK 测试，不等于所有格式或任意文件都可被服务读取；完整通用 Agent、复杂媒体功能及生产持久恢复仍未验收。工具、MCP、Skills 和公开推理摘要尚未接入，请求不会被静默忽略。`cwd` 不改变普通 SDK Agent 的进程工作目录，也不授予文件系统访问。详细使用与边界见 [OpenAI 接入](src/openai/README.md)。
 
 ## 契约组织
 
@@ -32,11 +32,13 @@ src/
   claude/
 ```
 
-`contract.ts` 持有输入、session、run、provider 与能力声明；引用三个具名模块，不为少量输入类型另拆 `input.ts`，也不在每个小目录中重复放 `contract.ts`。SDK 特有的装配留在 adapter；模块出现真实的多文件职责后再扩成目录。
+`contract.ts` 持有输入、session、run、provider 与能力声明；引用三个具名模块，不为少量输入类型另拆 `input.ts`，也不在每个小目录中重复放 `contract.ts`。SDK 特有的装配留在 adapter；`openai/input.ts` 只承担真实的原生内容映射，`output.ts` 承担文本输出投影，不建立另一套公共输入合同或媒体处理框架。
 
 ## 文件输入与传输
 
 产品 API 可以接受业务 `fileId`，但 host 在进入 harness 前负责校验归属并准备来源。`HarnessTurnInput.content` 只包含有序文字和文件；文件带 `mimeType`、可选 `filename`，`source` 为标准 `URL` 或 `Uint8Array`。这是执行侧类型，不是前端上传或消息 JSON 协议；前端不必重复发送文件内容。
+
+OpenAI adapter 将官方 vision MIME 映射为 `input_image`，其他有效 MIME 统一映射为 `input_file`，没有 PDF／Office 白名单。bytes 通过带 MIME 的 data URL 编码，HTTP(S) URL 保留原生引用；不下载、解析或猜文件名。原生 URL 内容没有 MIME 覆盖字段，原生图片内容也没有 filename 字段，不能宣称这些元数据都被传到模型。详细格式、元数据与服务限制见 [OpenAI 文件输入](src/openai/README.md#原生文件输入)。
 
 harness 不查询业务文件表、不持有对象存储客户端或账号凭据。host 提供已授权来源；adapter 按原生 SDK 需要准备输入，不静默丢弃或重排不支持的表达。临时 URL 不是永久文件身份，产品持久记录仍由 host 管理。
 
