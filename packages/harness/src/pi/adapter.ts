@@ -37,6 +37,7 @@ async function openSession(
   source: CreatePiHarnessOptions,
   options: OpenHarnessSessionOptions,
 ): Promise<HarnessSession> {
+  // Keep the admitted request authoritative; the host receives a separate copy across await.
   const request = { ...options };
   assertSessionRequest(request, source.resumable);
 

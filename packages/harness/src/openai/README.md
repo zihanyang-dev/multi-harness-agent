@@ -26,6 +26,8 @@ host 的 `open(options)` 返回 `OpenAISessionConfig`。不另设 client／model
 
 公开 runOptions 排除 `stream`、`session`、`signal`、`context`、`conversationId` 和 `previousResponseId`。实际调用总是最后提供前三项，不为它们另加重复拒绝；后三项会改变 context／history authority，仍在读取可能 lazy allocate 的 session ID 前拒绝。
 
+opening 先保留 caller request 快照，再向 host 传独立副本；返回 binding／runOptions 在可能异步分配的 history ID 校验前捕获，使准入、校验、执行与 cleanup 使用同一 authority。原生 Agent／Runner／Session／context／RunState 仍是原引用，不 clone SDK graph。
+
 factory 返回前的部分创建失败由 host 清理；返回后校验失败，wrapper 执行显式 cleanup。打开与 cleanup 同时失败时保留两个错误。disposal 幂等：等待 wrapper 的 SDK 结果，然后 await 显式 host cleanup。cleanup 自己按所拥有资源的生命周期收尾，不把 stream 完成当作任意资源已销毁的证书。
 
 `resumable` 只声明 host 验证过 history 按 ID 重开，不是审批恢复总开关，也不代表进程／节点故障恢复。`cwd` 不自动改变 SDK 工作目录，不是 sandbox。session ID 不是授权凭据。
@@ -36,6 +38,7 @@ factory 返回前的部分创建失败由 host 清理；返回后校验失败，
 - `result` 成功返回 `{ status, messages, native }`；状态为 `completed`／`cancelled`／`paused`。SDK／持久化错误保留原异常并拒绝结果，不自动重试或折叠成成功暂停。
 - `native` 是官方非 streaming RunResult，保留具体 context 与 output schema。getter 读取活状态；它不是 immutable snapshot。原生结果、错误与状态只应留在可信服务端。
 - `pendingRun` 是当前 continuation receipt。`resume({ result, input?, updateState? })` 只接受该结果对象；旧 receipt、其他 session 的 receipt 或失败后的重用会拒绝。
+- resume 入口一次捕获 receipt、追加输入和 updater；回调改写 options 不会替换已校验的原生执行。
 - `updateState` 必须同步并返回 undefined。host 先完成授权、审批与 IO，然后在 writer gate 内调用 SDK 的 `state.approve`／`state.reject`。不建立另一套 decisions／权限引擎。
 - 可追加输入，使用 SDK `RunState.addInput`；这是 staging，不保证已批准工具的副作用等待追加输入 guardrail 通过。
 - updater 部分修改后抛错或返回 Promise，不能安全回滚；该 owner fail-closed。host 必须先核对历史与业务副作用，不能直接重用旧 receipt。
@@ -78,4 +81,4 @@ pnpm test:e2e
 
 仓库 E2E 仅检查 Web → Hono health，不调用 Agent／模型。新版生产 dist 已另用真实网关／模型完成文本、history、审批、handoff、nested agent、schema、fresh context 恢复、取消与恢复、本地 MCP、原生 tool search 和 PNG／PDF／DOCX／XLSX／CSV 验收。
 
-临时 live 材料留在 /tmp，不加入正式目录或默认测试命令。完整矩阵为 22 passed／1 failed：包含 WAV／MP4 HTTP 400 的错误边界检查，不是 AV 理解成功；官方 Responses compaction 返回 HTTP 502，绕过 harness 直接调用官方 client 也复现。具体证据与未完成范围见完整审查。产品 Turn API、sandbox OS 隔离、生产持久化／跨进程恢复及 Pi／Claude 不据此判通过。
+临时 live 材料留在 /tmp，不加入正式目录或默认测试命令。完整矩阵为 22 passed／1 failed：包含 WAV／MP4 HTTP 400 的错误边界检查，不是 AV 理解成功；官方 Responses compaction 返回 HTTP 502，绕过 harness 直接调用官方 client 也复现。具体证据与未完成范围见完整审查；本轮官方资料、六个业内方案及 authority capture 修复见 [Harness 接入审查](../../../../docs/harness-integration-review.md)。产品 Turn API、sandbox OS 隔离、生产持久化／跨进程恢复及 Pi／Claude 不据此判通过。

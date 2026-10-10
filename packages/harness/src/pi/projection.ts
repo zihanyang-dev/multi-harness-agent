@@ -43,6 +43,7 @@ export function subscribeRun(
 
 /** Projects the native terminal observation only after its owned prompt has fulfilled. */
 export function toRunStatus(observation: RunObservation): HarnessTurnResult['status'] {
+  // prompt() can fulfil with an in-band failure, abort or deferred handle, or no model turn.
   const message = observation.lastAssistant;
   if (observation.aborted || message?.stopReason === 'aborted') return 'cancelled';
   if (message?.stopReason === 'error')
@@ -59,6 +60,7 @@ export async function* createRunEvents(options: CreateRunEventsOptions): AsyncGe
   let terminal: Event;
 
   try {
+    // This slice delivers settled full text; it does not promise native token streaming.
     const result = await options.result;
     yield* toFinalMessageEvents(result.messages);
     terminal = { type: EventType.RUN_FINISHED, ...identity, outcome: toRunOutcome(result.status) };
@@ -75,11 +77,12 @@ export async function* createRunEvents(options: CreateRunEventsOptions): AsyncGe
 /** Selects new non-error assistant text by native entry ID without rewriting history. */
 export function toMessages(
   entries: readonly SessionEntry[],
-  previousIds: ReadonlySet<string>,
+  previousEntryIds: ReadonlySet<string>,
 ): AssistantMessage[] {
+  // Raw branch entries are display history, not the SDK's compacted/edited model context.
   const messages: AssistantMessage[] = [];
   for (const entry of entries) {
-    if (entry.type !== 'message' || previousIds.has(entry.id)) continue;
+    if (entry.type !== 'message' || previousEntryIds.has(entry.id)) continue;
     const message = toTextMessage(entry);
     if (message !== undefined) messages.push(message);
   }
@@ -97,6 +100,7 @@ function observeEvent(
       return;
     case 'agent_start':
     case 'compaction_start':
+      // Preflight compaction installs its abort target before the model loop starts.
       onOperationStart();
       return;
     case 'agent_settled':
@@ -108,6 +112,7 @@ function observeEvent(
 function toTextMessage(
   entry: Extract<SessionEntry, { type: 'message' }>,
 ): AssistantMessage | undefined {
+  // Keep failures in native history without publishing retry fragments as successful answers.
   if (entry.message.role !== 'assistant' || entry.message.stopReason === 'error') return undefined;
   let content = '';
   for (const part of entry.message.content) {

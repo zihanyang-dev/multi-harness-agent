@@ -4,7 +4,7 @@
 
 版本固定为 Pi 1.1.0、OpenAI Agents SDK 0.20.0、Claude Agent SDK 0.3.295。保留官方 loop、原生 history／RunState、compaction 和能力差异，不编排视频或编码 Workflow，不建立第四执行框架。
 
-OpenAI 使用 SDK 结果与原生 iterator；Pi 等待官方 prompt 并观察原生事实，当前输出结算后的完整文本，不是实时 token stream。两者不接管未转交的资源，也不另建主动事件 pump。生产服务尚未全量验收，不能把包级测试当作产品验收。API 与限制见 [OpenAI 接入](src/openai/README.md)、[Pi 接入](src/pi/README.md)，证据见 [OpenAI 审查](../../docs/openai-review.md)、[Pi 审查](../../docs/pi-review.md)。
+OpenAI 使用 SDK 结果与原生 iterator；Pi 等待官方 prompt 并观察原生事实，当前输出结算后的完整文本，不是实时 token stream。两者不接管未转交的资源，也不另建主动事件 pump。生产服务尚未全量验收，不能把包级测试当作产品验收。API 与限制见 [OpenAI 接入](src/openai/README.md)、[Pi 接入](src/pi/README.md)，证据见 [OpenAI 审查](../../docs/openai-review.md)、[Pi 审查](../../docs/pi-review.md)。官方资料、六个业内实际接入与整个包的逐函数重新审查见 [Harness 接入审查](../../docs/harness-integration-review.md)。
 
 ## 当前入口与 ownership
 

@@ -65,8 +65,8 @@ host 提供已装配的原生 `AgentSession`。SDK 拥有 loop、工具执行、
 - 根入口和 `./pi` 指向实际 adapter；没有空 barrel 或另一份 native contract。保留已有 `./openai`。
 - `adapter.test.ts` 验证入口／opening snapshot；`adapter.test-d.ts` 验证具体 SDK binding 与 wrapper-owned images。
 - `request.test.ts` 验证有序文本和文件拒绝。
-- `session.test.ts` 的行为测试位于前部，真实 SDK 装配在尾部；fixture 在分配目录时就登记 cleanup，工具上下文证据在动作后的断言中检查。
-- `native.test.ts` 仅负责独立进程的隔离边界。根 Vitest 有意排除 child suite；正式入口运行 Pi 目录／launcher，不递归执行同一 suite，也不在共享测试进程加载用户配置。
+- `session.sdk.test.ts` 的行为测试位于前部，真实 SDK 装配在尾部；fixture 在分配目录时就登记 cleanup，工具上下文证据在动作后的断言中检查。
+- `session.test.ts` 负责独立进程的隔离边界，原来的 `native.test.ts` 名称已移除。根 Vitest 有意排除 child suite；正式入口运行 Pi 目录／session.test.ts，不递归执行同一 suite，也不在共享测试进程加载用户配置。
 
 ## 3. 真实模型 E2E
 
@@ -95,6 +95,6 @@ compaction 最初的短历史样本返回 Nothing to compact（没有可摘要�
 
 本轮不声称实时 token UI、文件输入、完整 tool／approval UI、全部 MCP／skills／search 服务、deferred retrieval、生产隔离、跨进程 writer、crash recovery、产品 Thread／Turn／Web／Worker 或 Claude adapter 已完成。它们保留原生装配入口，不通过便捷 wrapper 降级或模拟。
 
-本地 fresh verification：frozen install、`pnpm check`（Biome／全仓类型检查／59 个 outer tests／构建）、17 个独立进程原生 SDK tests、root／Pi／OpenAI built exports、11 个 changed TS 路径的 LSP error 检查和 Web health Playwright 1 项通过。outer runner 的 59 包含 1 个 child launcher，不把它误计为 59 + 17 个互不重叠的用例。
+上一阶段提交 `6eedb12` 的本地 fresh verification：frozen install、`pnpm check`（Biome／全仓类型检查／59 个 outer tests／构建）、17 个独立进程原生 SDK tests、root／Pi／OpenAI built exports、11 个 changed TS 路径的 LSP error 检查和 Web health Playwright 1 项通过。outer runner 的 59 包含 1 个 child launcher，不把它误计为 59 + 17 个互不重叠的用例。
 
-提交后跟踪 exact commit 的 GitHub CI；CI 不持有本地模型凭据，不执行付费模型矩阵。单元绿灯不代替上述真实模型证据，也不代替产品验收。
+该提交的 [GitHub CI](https://github.com/zihanyang-dev/multi-harness-agent/actions/runs/38070475022) 已核对 exact SHA 并成功结束。之后的官方资料、业内源码与整个包的重新审查见 [Harness 接入审查](harness-integration-review.md)。CI 不持有本地模型凭据，不执行付费模型矩阵。单元绿灯不代替上述真实模型证据，也不代替产品验收。

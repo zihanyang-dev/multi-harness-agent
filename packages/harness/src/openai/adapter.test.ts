@@ -2,6 +2,7 @@ import { Agent, MemorySession, Runner } from '@openai/agents';
 import { assistantMessage, ScriptedModel } from '@openai/agents/testing';
 import { expect, it } from 'vitest';
 
+import type { OpenHarnessSessionOptions } from '../contract.js';
 import { createOpenAIHarness } from './adapter.js';
 
 function config(id = 'history') {
@@ -20,6 +21,112 @@ it('opens only the native host configuration and preserves SDK execution', async
   const result = await (await session.run({ content: [{ type: 'text', text: 'Start' }] })).result;
   expect(result.native.lastAgent).toBe(native.agent);
   expect(result.native.finalOutput).toBe('Done');
+  await session.dispose();
+});
+
+it('snapshots opening scope and history before the host yields', async () => {
+  const native = config();
+  const opening = Promise.withResolvers<typeof native>();
+  let forwarded: OpenHarnessSessionOptions | undefined;
+  const harness = createOpenAIHarness({
+    resumable: true,
+    open: (request) => {
+      forwarded = request;
+      return opening.promise;
+    },
+  });
+  const request = { cwd: '/authorized', nativeSessionId: 'history' };
+  const pending = harness.openSession(request);
+  request.cwd = '/different';
+  request.nativeSessionId = 'different';
+  opening.resolve(native);
+
+  const session = await pending;
+  expect(forwarded).toEqual({ cwd: '/authorized', nativeSessionId: 'history' });
+  expect(session.nativeSessionId).toBe('history');
+  await session.dispose();
+});
+
+it('does not let host mutation replace the requested history identity', async () => {
+  const native = config('different');
+  let releases = 0;
+  const harness = createOpenAIHarness({
+    resumable: true,
+    open: async (request) => {
+      request.nativeSessionId = 'different';
+      return {
+        ...native,
+        dispose: () => {
+          releases++;
+        },
+      };
+    },
+  });
+
+  await expect(
+    harness.openSession({ cwd: '/authorized', nativeSessionId: 'history' }),
+  ).rejects.toThrow(/preserve the requested/);
+  expect(releases).toBe(1);
+});
+
+it('keeps the returned binding while native history allocates its identity', async () => {
+  const native = config();
+  const replacement = config('replacement');
+  const entered = Promise.withResolvers<void>();
+  const identity = Promise.withResolvers<string>();
+  native.session.getSessionId = () => {
+    entered.resolve();
+    return identity.promise;
+  };
+  let releases = 0;
+  let replacementReleases = 0;
+  const binding = {
+    ...native,
+    dispose: () => {
+      releases++;
+    },
+  };
+  const harness = createOpenAIHarness({ resumable: true, open: async () => binding });
+  const opening = harness.openSession({ cwd: '/authorized', nativeSessionId: 'history' });
+  await entered.promise;
+  binding.agent = replacement.agent;
+  binding.session = replacement.session;
+  binding.dispose = () => {
+    replacementReleases++;
+  };
+  identity.resolve('history');
+
+  const session = await opening;
+  const result = await (await session.run({ content: [{ type: 'text', text: 'Start' }] })).result;
+  expect(result.native.lastAgent).toBe(native.agent);
+  expect(await native.session.getItems()).toHaveLength(2);
+  expect(await replacement.session.getItems()).toHaveLength(0);
+  await session.dispose();
+  expect(releases).toBe(1);
+  expect(replacementReleases).toBe(0);
+});
+
+it('keeps validated run options while native history allocates its identity', async () => {
+  const native = config();
+  const entered = Promise.withResolvers<void>();
+  const identity = Promise.withResolvers<string>();
+  native.session.getSessionId = () => {
+    entered.resolve();
+    return identity.promise;
+  };
+  const runOptions: { maxTurns: number; context?: { injected: boolean } } = { maxTurns: 3 };
+  const harness = createOpenAIHarness({
+    resumable: true,
+    open: async () => ({ ...native, runOptions }),
+  });
+  const opening = harness.openSession({ cwd: '/authorized', nativeSessionId: 'history' });
+  await entered.promise;
+  runOptions.context = { injected: true };
+  identity.resolve('history');
+
+  const session = await opening;
+  const result = await (await session.run({ content: [{ type: 'text', text: 'Start' }] })).result;
+  expect(result.native.runContext.context).not.toEqual({ injected: true });
   await session.dispose();
 });
 

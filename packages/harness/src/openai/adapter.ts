@@ -88,14 +88,17 @@ export interface OpenAIHarness<C, A extends OpenAIAgent<C>> extends HarnessProvi
 
 async function openSession<C, A extends OpenAIAgent<C>>(
   source: CreateOpenAIHarnessOptions<C, A>,
-  request: OpenHarnessSessionOptions,
+  options: OpenHarnessSessionOptions,
 ): Promise<OpenAISession<C, A>> {
-  // Reject unsupported requests before the host allocates execution resources.
+  // Keep the admitted request authoritative across allocation; give the host its own copy.
+  const request = { ...options };
   assertSessionRequest(request, source.resumable);
 
   // The host cleans partial setup if open throws; a returned config transfers cleanup to us.
-  const config = await source.open(request);
+  let config = await source.open({ ...request });
   try {
+    // History ID allocation may yield. Validate and execute the same binding and option bag.
+    config = { ...config, runOptions: { ...config.runOptions } };
     const nativeSessionId = await validateSessionConfig(config, request.nativeSessionId);
     return createOpenAISession(config, nativeSessionId);
   } catch (error) {

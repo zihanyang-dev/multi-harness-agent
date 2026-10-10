@@ -26,6 +26,7 @@ interface SessionState {
 
 /** Owns local submissions; native capabilities and external writers remain host-coordinated. */
 export function createPiSession(config: PiSessionConfig, nativeSessionId: string): HarnessSession {
+  // Snapshot host bindings and options, not the borrowed native session graph.
   const state: SessionState = {
     config: { ...config, promptOptions: { ...config.promptOptions } },
     nativeSessionId,
@@ -43,7 +44,8 @@ export function createPiSession(config: PiSessionConfig, nativeSessionId: string
 async function runSession(state: SessionState, input: HarnessTurnInput): Promise<HarnessRun> {
   assertAvailable(state);
   const text = toNativeInput(input);
-  const previousIds = new Set(
+  // Include every existing branch so an extension's branch switch cannot replay old display text.
+  const previousEntryIds = new Set(
     state.config.session.sessionManager.getEntries().map((entry) => entry.id),
   );
   const execution: Execution = {
@@ -53,7 +55,7 @@ async function runSession(state: SessionState, input: HarnessTurnInput): Promise
   };
   state.active = execution;
 
-  const result = settleRun(state, execution, text, previousIds);
+  const result = settleRun(state, execution, text, previousEntryIds);
   // Keep the original result observable even when neither output is consumed.
   void result.catch(() => undefined);
   return {
@@ -67,7 +69,7 @@ async function settleRun(
   state: SessionState,
   execution: Execution,
   text: string,
-  previousIds: ReadonlySet<string>,
+  previousEntryIds: ReadonlySet<string>,
 ): Promise<HarnessTurnResult> {
   const { session, promptOptions } = state.config;
   let unsubscribe: (() => void) | undefined;
@@ -82,7 +84,8 @@ async function settleRun(
     if (session.sessionId !== state.nativeSessionId)
       throw new Error('Pi native session changed during execution');
     const status = toRunStatus(subscription.observation);
-    return { status, messages: toMessages(session.sessionManager.getBranch(), previousIds) };
+    // message_end precedes native append; read history after the owned prompt has joined.
+    return { status, messages: toMessages(session.sessionManager.getBranch(), previousEntryIds) };
   } finally {
     unsubscribe?.();
     state.active = undefined;
@@ -121,6 +124,7 @@ function disposeSession(state: SessionState): Promise<void> {
 async function releaseSession(state: SessionState): Promise<void> {
   const execution = state.active;
   await execution?.done.promise;
+  // A failed abort must not skip transferred cleanup or erase its independent failure.
   const errors: unknown[] = [];
   try {
     await execution?.stopping;

@@ -143,6 +143,39 @@ it('resumes a handoff interruption on the original root graph', async () => {
   await session.dispose();
 });
 
+it('continues the validated receipt even if the updater replaces its options', async () => {
+  let executions = 0;
+  const model = new ScriptedModel([
+    [functionCall('record', {}, { callId: 'owner-record' })],
+    [assistantMessage('Owner completed', { id: 'owner-answer' })],
+  ]);
+  const otherModel = new ScriptedModel([[functionCall('record', {}, { callId: 'other-record' })]]);
+  const { session } = setup(model, [recordTool(() => String(++executions))]);
+  const { session: otherSession } = setup(otherModel, [recordTool(() => 'Other')]);
+  const paused = await (await session.run(input)).result;
+  const otherPaused = await (await otherSession.run(input)).result;
+  const options = {
+    result: paused.native,
+    updateState: (state: typeof paused.native.state): undefined => {
+      for (const request of state.getInterruptions()) state.approve(request);
+      options.result = otherPaused.native;
+    },
+  };
+
+  try {
+    const result = await (await session.resume(options)).result;
+    expect(result.status).toBe('completed');
+    expect(result.native.finalOutput).toBe('Owner completed');
+    expect(executions).toBe(1);
+    expect(otherSession.pendingRun).toBe(otherPaused.native);
+    model.assertComplete();
+    otherModel.assertComplete();
+  } finally {
+    await session.dispose();
+    await otherSession.dispose();
+  }
+});
+
 it('lets the SDK propagate and resume nested agent tool approvals', async () => {
   let executions = 0;
   const nestedModel = new ScriptedModel([

@@ -57,6 +57,6 @@ pnpm check
 pnpm exec vitest run packages/harness/src/pi
 ```
 
-`native.test.ts` 在临时 HOME、白名单环境与离线配置的独立进程运行相邻 `session.test.ts`，使用真实 SDK／原生工具与官方 faux provider 替换模型 IO；不读取用户配置、凭据或 history。根 runner 有意排除 child suite，不要直接用根配置运行 `session.test.ts`。内存 history 测试验证记录与 entry ID，不声称磁盘耐久性。
+`session.test.ts` 是默认测试入口，在临时 HOME、白名单环境与离线配置的独立进程运行相邻 `session.sdk.test.ts`。后者使用真实 SDK／原生工具与官方 faux provider 替换模型 IO；不读取用户配置、凭据或 history。根 runner 有意排除 child suite，因此直接指定 `session.test.ts` 也会走正确的隔离路径。这是正式离线测试，不是真实模型脚本；以前笼统的 `native.test.ts` 名称已移除。内存 history 测试验证记录与 entry ID，不声称磁盘耐久性。
 
-用户授权后的真实模型测试使用本地 Pi 的原生鉴权绑定、生产 dist、实际模型／工具与临时磁盘 history；材料只放 `/tmp`，不进入默认测试或仓库。逐文件审查、真实结果和未验收范围见 [Pi 审查](../../../../docs/pi-review.md)。
+用户授权后的真实模型测试使用本地 Pi 的原生鉴权绑定、生产 dist、实际模型／工具与临时磁盘 history；材料只放 `/tmp`，不进入默认测试或仓库。逐文件审查、真实结果和未验收范围见 [Pi 审查](../../../../docs/pi-review.md)；本轮官方文档、六个业内方案与整个包的重新审查见 [Harness 接入审查](../../../../docs/harness-integration-review.md)。

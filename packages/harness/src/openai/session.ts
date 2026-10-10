@@ -80,20 +80,20 @@ async function resumeSession<C, A extends OpenAIAgent<C>>(
   options: OpenAIResumeOptions<C, A>,
 ): Promise<OpenAIRun<C, A>> {
   assertAvailable(state);
-  if (state.pending?.native !== options.result) {
+  // The updater may mutate its options. Keep one validated receipt and callback for this attempt.
+  const { result, input: additionalInput, updateState } = options;
+  if (state.pending?.native !== result) {
     throw new Error('OpenAI continuation is stale or belongs to another session');
   }
-  const input = options.input === undefined ? undefined : toNativeInput(options.input);
+  const input = additionalInput === undefined ? undefined : toNativeInput(additionalInput);
   // Native results are live views. Capture observations before the host mutates their shared state.
-  const previousMessageIds = new Set(
-    toMessages(options.result.newItems).map((message) => message.id),
-  );
+  const previousMessageIds = new Set(toMessages(result.newItems).map((message) => message.id));
   // Reserve before native mutation or a host callback that could reenter this session.
   const execution = reserveExecution(state);
 
   try {
-    if (input !== undefined) options.result.state.addInput(input);
-    const returned: unknown = options.updateState?.(options.result.state);
+    if (input !== undefined) result.state.addInput(input);
+    const returned: unknown = updateState?.(result.state);
     if (returned !== undefined) {
       void Promise.resolve(returned).catch(() => undefined);
       throw new Error('OpenAI state updater must be synchronous and return undefined');
@@ -107,7 +107,7 @@ async function resumeSession<C, A extends OpenAIAgent<C>>(
   }
 
   // Resume the exact SDK state under the same root, Runner and history, never a rebuilt transcript.
-  return startExecution(state, execution, options.result.state, previousMessageIds);
+  return startExecution(state, execution, result.state, previousMessageIds);
 }
 
 function disposeSession<C, A extends OpenAIAgent<C>>(state: SessionState<C, A>): Promise<void> {

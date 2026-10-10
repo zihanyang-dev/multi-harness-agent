@@ -33,13 +33,14 @@ export interface HarnessTurnResult {
 }
 
 export interface HarnessRun {
+  /** Single observation; stopping consumption does not cancel execution. Timing is adapter-specific. */
   readonly events: AsyncIterable<BaseEvent>;
   readonly result: Promise<HarnessTurnResult>;
   /** Requests interruption; the result reports actual completion separately. */
   interrupt: () => Promise<void>;
 }
 
-/** Owns one native session; callers must serialize access to its writable state. */
+/** Coordinates local submissions; the host coordinates other writers and native resource owners. */
 export interface HarnessSession {
   readonly nativeSessionId: string;
   run: (input: HarnessTurnInput) => Promise<HarnessRun>;
