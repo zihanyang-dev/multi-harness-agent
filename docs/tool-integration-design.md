@@ -1,6 +1,6 @@
 # 多 harness 原生接入设计
 
-> 状态：2026-10-10 官方文档复核后的设计与实施边界。OpenAI 工作区已有原生 factory／continuation 正常路径，具体 API 见 [OpenAI 接入](../packages/harness/src/openai/README.md)。[完整审查](openai-review.md) 已更正过强的 SDK 收尾假设，并删除 wrapper 多余的主动事件队列；SDK-managed 资源与 host-owned 资源仍按各自 lifecycle 管理，不建设平台通用 finalization。Pi／Claude 部分仍是设计，不是生产恢复验收。
+> 状态：2026-10-10 官方文档复核后的设计与实施边界。OpenAI 工作区已有原生 factory／continuation 正常路径，具体 API 见 [OpenAI 接入](../packages/harness/src/openai/README.md)。[完整审查](openai-review.md) 已更正过强的 SDK 收尾假设，并删除 wrapper 多余的主动事件队列；SDK-managed 资源与 host-owned 资源仍按各自 lifecycle 管理，不建设平台通用 finalization。Pi 已完成包级文本切片，见 [Pi 接入](../packages/harness/src/pi/README.md) 与 [Pi 审查](pi-review.md)；Claude 仍是设计。两者均不是生产恢复验收。
 
 ## 1. 重新确定边界
 
@@ -200,7 +200,7 @@ OpenAI 公开类型与 provider 入口在 `adapter.ts`；`session.ts` 以普通�
 4. 明确测试原生 snapshot round-trip 与 fresh context；host durable storage／跨进程恢复、真实 MCP、sandbox 隔离和模型服务支持分别标注，不用离线绿灯代替。
 5. 更新真实 public types／导出／使用文档；完整 check、E2E、LSP 与独立 review 后再请求提交确认。
 
-此文保留原生能力与后续实施目标，不宣称整个自然能力簇、Pi／Claude adapter 或生产全恢复已经实现。OpenAI 当前实现与最终相邻测试结构见接入文档；完整 check、E2E、类型检查与独立 review 的实际结果由实施报告记录，此处不预填测试数量或通过结论。
+此文保留原生能力与后续实施目标，不宣称整个自然能力簇、Claude adapter 或生产全恢复已经实现；Pi 当前只验收包级文本切片。OpenAI 当前实现与最终相邻测试结构见接入文档；完整 check、E2E、类型检查与独立 review 的实际结果由实施报告记录，此处不预填测试数量或通过结论。
 
 旧 native hosted-tool wire／client-search 离线实验不算外部服务 acceptance。用户授权后的新版 live 已验证本地真实 MCP、原生 server tool search／deferred function、HITL 与 native fresh-context 恢复等，证据见完整审查；没有 SDK 升级。WAV／MP4 通用文件被网关拒绝，原生 Responses compaction HTTP 502，未用替代框架改绿。sandbox、host durable storage 与跨进程故障恢复仍需对应服务验收。临时 live 脚本／fixture 不进入正式源码。
 

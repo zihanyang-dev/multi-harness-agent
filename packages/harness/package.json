@@ -13,6 +13,11 @@
       "types": "./dist/openai/adapter.d.ts",
       "development": "./src/openai/adapter.ts",
       "default": "./dist/openai/adapter.js"
+    },
+    "./pi": {
+      "types": "./dist/pi/adapter.d.ts",
+      "development": "./src/pi/adapter.ts",
+      "default": "./dist/pi/adapter.js"
     }
   },
   "files": [
@@ -25,6 +30,7 @@
   "dependencies": {
     "@ag-ui/core": "1.0.2",
     "@anthropic-ai/claude-agent-sdk": "0.3.295",
+    "@earendil-works/pi-ai": "1.1.0",
     "@earendil-works/pi-coding-agent": "1.1.0",
     "@openai/agents": "0.20.0"
   },

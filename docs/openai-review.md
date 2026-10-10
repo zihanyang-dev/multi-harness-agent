@@ -94,7 +94,7 @@ compaction 失败在真实 SDK Session 下复现两次；绕过 harness 直接�
 
 临时 live runner、媒体、MCP fixture 放在 /tmp，不加入正式源码、依赖、脚本或默认测试命令。正式目录仍为相邻 xxx.test.ts／类型测试。旧网关结果仍只算历史，以上才是新版证据。
 
-产品 Web／Turn API 尚未接通 Agent；sandbox OS 隔离、生产 durable history／跨进程协调、进程／节点故障恢复、Pi／Claude adapters 仍未实现或验收。包级真实模型路径通过不代表这些产品能力完成。
+产品 Web／Turn API 尚未接通 Agent；sandbox OS 隔离、生产 durable history／跨进程协调、进程／节点故障恢复、Claude adapter 仍未实现或验收。Pi 后续完成的包级文本切片与独立证据见 [Pi 审查](pi-review.md)，不纳入这份 OpenAI 矩阵。包级真实模型路径通过不代表这些产品能力完成。
 
 ### 最后一轮独立审查
 

@@ -19,3 +19,10 @@ export {
   type OpenAISessionConfig,
   type OpenAITurnResult,
 } from './openai/adapter.js';
+export {
+  type CreatePiHarnessOptions,
+  createPiHarness,
+  type PiHarness,
+  type PiHarnessPromptOptions,
+  type PiSessionConfig,
+} from './pi/adapter.js';

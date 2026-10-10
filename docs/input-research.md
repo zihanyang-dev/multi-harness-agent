@@ -99,14 +99,14 @@
 - download / upload 是 host 提供的普通工具，OpenAI 当前通过 factory 返回的原生 Agent 注入；此前规划的共享 `tools` 路径及 portable 契约已删除，不在 harness 新建文件工具工厂。模型参数、返回事实与 host 责任见 [Harness 接入说明](../packages/harness/README.md#文件输入与业务传输)。
 
 ### 仍需验收
-- Pi 的交错输入限制在首版如何呈现：明确受限、选择另一入口组合，还是采用已验证的官方扩展。不能先承诺无损后补上下文补丁。
+- Pi 首个执行切片明确仅接收文本，文件拒绝。后续交错媒体输入如何使用原生入口／已验证扩展仍待验收，不能先承诺无损后补上下文补丁。
 - 各 SDK 的工具结果图片/PDF 映射、来源过期与恢复行为。
 
 本文不声称存在“全社区唯一、最干净的最佳实践”。干净的判断标准是保留需求语义、真实支持可验证、责任清楚，不只是字段少。
 
 ## 6. 历史离线 SDK 接入实验
 
-下述记录属于旧快照。当时的代码位于 `packages/harness/tests/sdk/`，素材位于 `packages/harness/tests/fixtures/media.ts`；这些文件现已删除，下面的旧命令不能在当前工作区重跑。这是历史 SDK 接入／契约证据，不是新版验收或任务效果评测。当前验证入口为相邻 OpenAI 测试，不运行真实 Pi session／Claude CLI。
+下述记录属于旧快照。当时的代码位于 `packages/harness/tests/sdk/`，素材位于 `packages/harness/tests/fixtures/media.ts`；这些文件现已删除，下面的旧命令不能在当前工作区重跑。这是历史 SDK 接入／契约证据，不是新版验收或任务效果评测。当前验证入口为相邻 OpenAI 测试与 Pi 独立离线 native suite；新的 Pi 实现和真实模型证据见 [Pi 审查](pi-review.md)，不运行真实 Claude CLI。
 
 三个执行 fixture 按 `pi-session`、`openai-responses`、`claude-stdin` 命名，通过公开 SDK 入口运行，不调用私有 converter、不下钻 `session.agent`、不自建 loop。图片是合成的 1×1 PNG，PDF 是合成单页文档。主样本为 text A → red image → text B → blue image → text C；OpenAI / Claude 再追加 PDF 与 text D。
 
