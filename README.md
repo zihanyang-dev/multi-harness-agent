@@ -9,14 +9,15 @@
 - pnpm workspace、Node 24.21.0 项目运行时、TypeScript 严格检查。
 - React / Vite Web 入口与真实 HTTP liveness 查询。
 - Hono API 入口，`GET /healthz` 返回 `{ "status": "ok" }`，不表示数据库或队列就绪。
-- Harness / Sandbox 初始契约、官方 SDK 依赖，以及 MCP、Tool、Skills 接入模块。
+- Harness / Sandbox 初始契约与官方 SDK 依赖，不另建 portable Tool／MCP／Skills 契约。
+- OpenAI 原生 factory adapter：有序输入、文本观察、原生审批与本地 execution ownership；尚未接入产品 API。
 - BullMQ / Redis、SQL、认证、S3、遥测的依赖归属。
 - 格式、lint、类型检查、单元测试、构建、浏览器 smoke 和 CI。
 - 本地 PostgreSQL / Redis Compose，Server / Worker 非 root 镜像入口。
 
 ## 未实现
 
-Thread / 消息业务 API、迁移与 outbox、任务消费者、公开事件分发、认证接入、成果交付、原生 SDK adapters、E2B adapter、评测数据集与评分器。
+Thread / 消息业务 API、迁移与 outbox、任务消费者、公开事件分发、认证接入、成果交付、Pi／Claude adapters、E2B adapter、评测数据集与评分器。
 
 Worker 入口只说明未注册执行器并退出，**不会连接 Redis 或领取任务**。运行检查不会调用模型、创建 sandbox 或使用云端凭证。
 
@@ -65,7 +66,7 @@ apps/
   server/                    # HTTP 与产品入口
   worker/                    # 执行监督；尚未注册消费者
 packages/
-  harness/                   # 官方 SDK 的初始公共契约
+  harness/                   # 公共契约与 OpenAI 原生接入
   sandbox/                   # 管理权限与单环境能力分开
   protocol/                  # 跨边界 schema
 
@@ -87,3 +88,5 @@ docs/
 - [架构品味](docs/architecture-taste.md)
 - [代码品味](docs/code-taste.md)
 - [技术选型与生产架构基线](docs/technology-stack.md)
+- [OpenAI 接入与限制](packages/harness/src/openai/README.md)
+- [OpenAI 代码审查与验收边界](docs/openai-review.md)

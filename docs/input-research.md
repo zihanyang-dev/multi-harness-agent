@@ -1,6 +1,6 @@
 # 多模态输入与顺序：调研记录
 
-调研日期：2026-10-09。本文记录研究、离线 SDK 接入实验与随后批准的输入边界，不宣称已实现生产多模态。`HarnessTurnInput` 已收敛为有序 text / file，文件来源由 host 准备，不携带业务 `fileId`。已增加 harness 接入测试，以及测试直接使用的 pi-ai / OpenAI client 开发依赖，没有新增执行框架。
+调研日期：2026-10-09。本文记录研究、离线 SDK 接入实验与随后批准的输入边界，不宣称已实现生产多模态。`HarnessTurnInput` 已收敛为有序 text / file，文件来源由 host 准备，不携带业务 `fileId`。当时增加了三个 SDK 的离线实验。相关旧 fixtures 已在 OpenAI 重写中删除，不再是当前可执行测试；当前相邻测试及依赖见 [Harness 接入](../packages/harness/README.md)。研究结论不追认为新版实现的验收，没有新增执行框架。
 
 ## 1. 问题不是给媒体逐个起类型名字
 
@@ -96,7 +96,7 @@
 
 - `HarnessTurnInput.content` 是有序 text / file；file 使用 MIME、可选 filename，以及标准 `URL` 或 `Uint8Array` 来源。类型留在 `contract.ts`，不为少量字段另拆输入模块。
 - 产品文件 ID、对象存储与读取授权由 host 管理；harness 不导入业务文件系统，也不拥有来源注册中心或存储客户端。
-- download / upload 是 host 提供的普通工具，通过已有 `tools` 注入，不在 harness 新建文件工具工厂。模型参数、返回事实与 host 责任见 [Harness 接入说明](../packages/harness/README.md#文件输入与传输)。
+- download / upload 是 host 提供的普通工具，OpenAI 当前通过 factory 返回的原生 Agent 注入；此前规划的共享 `tools` 路径及 portable 契约已删除，不在 harness 新建文件工具工厂。模型参数、返回事实与 host 责任见 [Harness 接入说明](../packages/harness/README.md#文件输入与业务传输)。
 
 ### 仍需验收
 - Pi 的交错输入限制在首版如何呈现：明确受限、选择另一入口组合，还是采用已验证的官方扩展。不能先承诺无损后补上下文补丁。
@@ -104,9 +104,9 @@
 
 本文不声称存在“全社区唯一、最干净的最佳实践”。干净的判断标准是保留需求语义、真实支持可验证、责任清楚，不只是字段少。
 
-## 6. 已执行的离线 SDK 接入实验
+## 6. 历史离线 SDK 接入实验
 
-代码在 `packages/harness/tests/sdk/`，合成素材在 `packages/harness/tests/fixtures/media.ts`。这是 SDK 接入／契约测试，不是任务效果评测；没有改动 `evals/`。测试已经加入 Vitest 发现与 harness 类型检查，构建仍只输出 `src/`。
+下述记录属于旧快照。当时的代码位于 `packages/harness/tests/sdk/`，素材位于 `packages/harness/tests/fixtures/media.ts`；这些文件现已删除，下面的旧命令不能在当前工作区重跑。这是历史 SDK 接入／契约证据，不是新版验收或任务效果评测。当前验证入口为相邻 OpenAI 测试，不运行真实 Pi session／Claude CLI。
 
 三个执行 fixture 按 `pi-session`、`openai-responses`、`claude-stdin` 命名，通过公开 SDK 入口运行，不调用私有 converter、不下钻 `session.agent`、不自建 loop。图片是合成的 1×1 PNG，PDF 是合成单页文档。主样本为 text A → red image → text B → blue image → text C；OpenAI / Claude 再追加 PDF 与 text D。
 
@@ -133,13 +133,13 @@
 | OpenAI core `audio` 内容 | 默认 Responses 路径报 `Unsupported input content type`，HTTP transport 未被调用 | 已验证明确拒绝，不因为 core 类型可表达就声称默认 adapter 支持 |
 | Claude text / image / PDF | SDK 写入 stdin 的 user JSON 帧保序 | 仅 `sdk-stdin`；未证明 CLI 后续转换、模型请求、原生历史或工具媒体结果 |
 
-这些结果由 3 个测试文件、10 个接入断言覆盖；命令为 `pnpm exec vitest run packages/harness/tests/sdk`。捕获的请求、native items、context、JSONL 和 stdin 帧保留在 fixture 报告中，用 unknown / Zod 校验，不拿源码字符串断言替代运行行为。
+当时这些结果由 3 个测试文件、10 个接入断言覆盖；旧命令为 `pnpm exec vitest run packages/harness/tests/sdk`。捕获的请求、native items、context、JSONL 和 stdin 帧保留在 fixture 报告中，用 unknown / Zod 校验，不拿源码字符串断言替代运行行为。
 
 ### 工具结果必须使用对应 SDK 的公开类型
 
 OpenAI 的工具回调结果是 `text/image/file`，用户输入与归一化后的历史才使用 `input_*`。实验最初把 `input_*` 数组从工具回调返回，实际请求将它序列化为 JSON 字符串，而不是原生多模态工具结果。改用 `ToolOutputText` / `ToolOutputImage` / `ToolOutputFileContent` 后，结构化结果进入了第二请求与 native history。
 
-这是接入格式错误，不是 OpenAI 不支持图片工具结果的证明。测试回调现在有明确的公开结果类型；也不能把 MCP `CallToolResult` 不经映射直接传入每个 SDK。当前公共 Tool 契约的其他 MCP 内容分支仍未验收。
+这是接入格式错误，不是 OpenAI 不支持图片工具结果的证明。当时修正后的测试回调有明确的公开结果类型；也不能把 MCP `CallToolResult` 不经映射直接传入每个 SDK。旧公共 Tool 契约现已删除，当前由 host 使用对应 SDK 的原生工具／MCP 接口装配；这些历史实验不作为其他内容分支的验收证据。
 
 Claude 报告中的 `fixtureCleanup` 仅检查测试替身完成收尾，不作为 SDK 无资源泄漏的证明。
 
@@ -149,7 +149,7 @@ Claude 报告中的 `fixtureCleanup` 仅检查测试替身完成收尾，不作�
 2. 产品保存原始顺序；adapter 的能力准入与来源准备单独处理。来源授权、获取方式与模型表达不是一个字段能承担的职责。
 3. Pi 的高层入口限制已经由运行实验确认。首版不能承诺三个 SDK 任意交错都无损；拒绝不支持的表达或采用经验证、明确告知的准备路径，需要作为显式设计选择，不能静默重排。
 4. 视频／音频可作为资源引用不等于可原生理解；Responses 的 file URL 转换成功也不等于供应商接受其 MIME。抽帧／转录属于另外的已授权处理，不假装原样输入。
-5. 输入类型已调整，并由 `tests/input.test-d.ts` 检查 URL／字节来源及对业务 `fileId` 的隔离；当前 OpenAI 文本会话 adapter 尚未接入文件输入；host 来源准备、文件传输、业务上传及媒体处理仍未实现。
+5. 输入类型已调整；旧 `tests/input.test-d.ts` 已删除。当前 OpenAI adapter 已接入有序文字／图片／通用文件映射，相邻测试覆盖可见字节快照与官方 Responses 转换器的请求构造；不代表真实模型接受或理解所有 MIME。host 来源准备、文件传输、业务上传及媒体处理仍未实现。
 
 下一阶段仍需验证 Claude 原生 CLI 请求与保存／恢复、真实模型的素材接受、授权来源过期、更多工具内容分支和 compaction 后的语义。需要网络模型验收时另行明确范围与凭据，不默认上传用户私有素材。
 

@@ -1,13 +1,12 @@
-import { randomUUID } from 'node:crypto';
-import {
+import type {
   Agent,
-  type ModelSettings,
-  OpenAIResponsesModel,
-  type RunItem,
+  RunContext,
   Runner,
-  type Session,
+  RunResult,
+  RunState,
+  Session,
+  StreamRunOptions,
 } from '@openai/agents';
-import { APIUserAbortError, type default as OpenAI } from 'openai';
 
 import type {
   HarnessProvider,
@@ -17,206 +16,129 @@ import type {
   HarnessTurnResult,
   OpenHarnessSessionOptions,
 } from '../contract.js';
-import { toNativeInput } from './input.js';
-import { createRunEvents, toMessages } from './output.js';
+import { createOpenAISession } from './session.js';
 
-/**
- * Opens native SDK sessions through the host's explicitly selected backend.
- *
- * The host owns storage connections and cross-wrapper write serialization. Requested IDs
- * must be preserved. Declare resumable only after verifying history survives reopening.
- */
-export interface OpenAISessions {
-  readonly resumable: boolean;
-  open: (nativeSessionId?: string) => Promise<Session>;
-}
+// The SDK's broad output constraint preserves the concrete Agent's schema.
+// biome-ignore lint/suspicious/noExplicitAny: Matches the SDK constraint without erasing the concrete Agent type.
+export type OpenAIAgent<TContext> = Agent<TContext, any>;
 
-/** Fixed provider configuration; session identity and turn input belong to the public contract. */
-export interface CreateOpenAIHarnessOptions {
-  client: OpenAI;
-  model: string;
-  sessions: OpenAISessions;
-  instructions?: string;
-  modelSettings?: ModelSettings;
-}
-
-interface ActiveTurn {
-  readonly controller: AbortController;
-  readonly settlement: PromiseWithResolvers<void>;
-}
-
-/** Only the native facts needed to settle and project this turn. */
-interface NativeTurnOutput {
-  readonly completed: Promise<void>;
-  readonly cancelled: boolean;
-  readonly newItems: readonly RunItem[];
-}
-
-/** Native dependencies and lifecycle belong to this wrapper, not to event readers. */
-interface SessionState {
-  readonly nativeSessionId: string;
-  readonly nativeSession: Session;
-  readonly agent: Agent;
-  readonly runner: Runner;
-  active: ActiveTurn | undefined;
-  disposal: Promise<void> | undefined;
-}
-
-/**
- * Creates the adapter around the official Runner, native input and text output.
- *
- * Model transport and history storage are independent. Disposing a wrapper does not clear
- * history or close host-owned connections. SDK tracing is disabled.
- */
-export function createOpenAIHarness(options: CreateOpenAIHarnessOptions): HarnessProvider {
+/** Binds one trusted host factory without rebuilding its native Agent or Runner. */
+export function createOpenAIHarness<C, A extends OpenAIAgent<C>>(
+  options: CreateOpenAIHarnessOptions<C, A>,
+): OpenAIHarness<C, A> {
+  // Keep the factory binding stable; the host still owns scope and authorization per open.
+  const source = { ...options };
   return {
     id: 'openai',
-    // These describe this adapter's current boundary, not everything the SDK can support.
-    capabilities: {
-      resume: options.sessions.resumable,
-      steer: false,
-      visibleReasoning: false,
-      customTools: false,
-      mcp: false,
-      skills: false,
-    },
-    openSession: (sessionOptions) => openSession(options, sessionOptions),
+    resumable: source.resumable,
+    openSession: (request) => openSession(source, request),
   };
 }
 
-async function openSession(
-  configuration: CreateOpenAIHarnessOptions,
-  options: OpenHarnessSessionOptions,
-): Promise<HarnessSession> {
-  assertSessionOptions(options);
-  if (options.nativeSessionId !== undefined && !configuration.sessions.resumable)
-    throw new Error('OpenAI session source does not support resume');
+export type OpenAIHarnessRunOptions<C, A extends OpenAIAgent<C>> = Omit<
+  StreamRunOptions<C, A>,
+  'stream' | 'session' | 'signal' | 'context' | 'conversationId' | 'previousResponseId'
+>;
 
-  // Backend selection belongs to the host; opening failures must not trigger a fallback.
-  const nativeSession = await configuration.sessions.open(options.nativeSessionId);
-  const nativeSessionId = await nativeSession.getSessionId();
-  if (nativeSessionId.trim() === '') throw new Error('OpenAI native session ID must not be empty');
-  if (options.nativeSessionId !== undefined && nativeSessionId !== options.nativeSessionId)
-    throw new Error('OpenAI session source did not preserve the requested native session ID');
-
-  const agent = new Agent({
-    name: 'Assistant',
-    instructions: configuration.instructions ?? '',
-    model: new OpenAIResponsesModel(configuration.client, configuration.model),
-    ...(configuration.modelSettings !== undefined
-      ? { modelSettings: configuration.modelSettings }
-      : {}),
-  });
-
-  // One wrapper owns this lifecycle. Other writers of the same native ID require host serialization.
-  const state: SessionState = {
-    nativeSessionId,
-    nativeSession,
-    agent,
-    runner: new Runner({ tracingDisabled: true }),
-    active: undefined,
-    disposal: undefined,
-  };
-
-  return {
-    nativeSessionId,
-    run: (input) => runTurn(input, state),
-    dispose: () => disposeSession(state),
-  };
+/** Native objects assembled by the host; only dispose transfers resource-release ownership. */
+export interface OpenAISessionConfig<C, A extends OpenAIAgent<C>> {
+  agent: A;
+  runner: Runner;
+  session: Session;
+  context?: C | RunContext<C>;
+  runOptions?: OpenAIHarnessRunOptions<C, A>;
+  /** Trusted state restored against this root graph and history identity. */
+  runState?: RunState<C, A>;
+  /** Releases host-owned resources using their own lifecycle; never closes borrowed SDK resources. */
+  dispose?: () => void | Promise<void>;
 }
 
-/** Holds the writer through SDK setup, execution and history persistence. */
-async function runTurn(input: HarnessTurnInput, state: SessionState): Promise<HarnessRun> {
-  if (state.disposal) throw new Error('OpenAI session is disposed');
-  if (state.active) throw new Error('OpenAI session already has an active run');
-  const nativeInput = toNativeInput(input);
+/** Native getters read live SDK state. Keep the native result on the trusted server. */
+export interface OpenAITurnResult<C, A extends OpenAIAgent<C>> extends HarnessTurnResult {
+  native: RunResult<C, A>;
+}
 
-  // Reserve before awaiting Runner setup; cancellation and disposal must see the pending turn.
-  const turn: ActiveTurn = {
-    controller: new AbortController(),
-    settlement: Promise.withResolvers<void>(),
-  };
-  state.active = turn;
+export interface OpenAIRun<C, A extends OpenAIAgent<C>> extends HarnessRun {
+  readonly result: Promise<OpenAITurnResult<C, A>>;
+}
 
+export interface OpenAIResumeOptions<C, A extends OpenAIAgent<C>> {
+  result: RunResult<C, A>;
+  input?: HarnessTurnInput;
+  /** Synchronous native mutation; complete authorization and I/O before calling resume. */
+  updateState?: (state: RunState<C, A>) => undefined;
+}
+
+export interface OpenAISession<C, A extends OpenAIAgent<C>> extends HarnessSession {
+  readonly pendingRun: RunResult<C, A> | undefined;
+  run: (input: HarnessTurnInput) => Promise<OpenAIRun<C, A>>;
+  resume: (options: OpenAIResumeOptions<C, A>) => Promise<OpenAIRun<C, A>>;
+}
+
+export interface CreateOpenAIHarnessOptions<C, A extends OpenAIAgent<C>> {
+  /** Host-verified history reopening, not a claim of crash recovery. */
+  resumable: boolean;
+  open: (options: OpenHarnessSessionOptions) => Promise<OpenAISessionConfig<C, A>>;
+}
+
+export interface OpenAIHarness<C, A extends OpenAIAgent<C>> extends HarnessProvider {
+  readonly id: 'openai';
+  openSession: (options: OpenHarnessSessionOptions) => Promise<OpenAISession<C, A>>;
+}
+
+async function openSession<C, A extends OpenAIAgent<C>>(
+  source: CreateOpenAIHarnessOptions<C, A>,
+  request: OpenHarnessSessionOptions,
+): Promise<OpenAISession<C, A>> {
+  // Reject unsupported requests before the host allocates execution resources.
+  assertSessionRequest(request, source.resumable);
+
+  // The host cleans partial setup if open throws; a returned config transfers cleanup to us.
+  const config = await source.open(request);
   try {
-    const nativeRun = await state.runner.run(state.agent, nativeInput, {
-      stream: true,
-      session: state.nativeSession,
-      signal: turn.controller.signal,
-    });
-    const result = finishTurn(nativeRun, turn, state);
-
-    // Execution is independent of readers; observe failures even if neither output is consumed.
-    void result.catch(() => {});
-
-    // Closing an observer must not cancel the execution owned by this wrapper.
-    const stream = nativeRun.toStream().values({ preventCancel: true });
-    const events = createRunEvents(stream, {
-      threadId: state.nativeSessionId,
-      runId: randomUUID(),
-      result,
-    });
-
-    return {
-      events,
-      result,
-      async interrupt() {
-        // A retained handle from an older turn must not interrupt a newer one.
-        if (state.active === turn) turn.controller.abort();
-      },
-    };
+    const nativeSessionId = await validateSessionConfig(config, request.nativeSessionId);
+    return createOpenAISession(config, nativeSessionId);
   } catch (error) {
-    // Runner setup can fail before it returns a streamed result.
-    releaseTurn(turn, state);
-    throw error;
+    return closeFailedOpening(config, error);
   }
 }
 
-/** Projects the settled outcome, preserving failures the SDK delivers outside our abort wrapper. */
-async function finishTurn(
-  nativeRun: NativeTurnOutput,
-  turn: ActiveTurn,
-  state: SessionState,
-): Promise<HarnessTurnResult> {
-  try {
-    await nativeRun.completed;
-    return {
-      status: nativeRun.cancelled ? 'cancelled' : 'completed',
-      messages: toMessages(nativeRun.newItems),
-    };
-  } catch (error) {
-    // SDK 0.20.0 misses the client's abort wrapper. Match our reason, preserving other errors.
-    // The client can already fold a concurrent fetch failure into this wrapper after abort.
-    const signal = turn.controller.signal;
-    if (!signal.aborted || !(error instanceof APIUserAbortError) || error.cause !== signal.reason)
-      throw error;
-    return { status: 'cancelled', messages: toMessages(nativeRun.newItems) };
-  } finally {
-    // Native completion includes history persistence for this configured text-output Runner.
-    releaseTurn(turn, state);
-  }
-}
-
-/** Releases local write ownership and lets disposal finish joining this turn. */
-function releaseTurn(turn: ActiveTurn, state: SessionState): void {
-  state.active = undefined;
-  turn.settlement.resolve();
-}
-
-/** Stops admitting turns, requests interruption and joins the current native settlement. */
-function disposeSession(state: SessionState): Promise<void> {
-  if (state.disposal) return state.disposal;
-  state.active?.controller.abort();
-  state.disposal = state.active?.settlement.promise ?? Promise.resolve();
-  // Releasing this wrapper must not clear native history or close host-owned connections.
-  return state.disposal;
-}
-
-function assertSessionOptions(options: OpenHarnessSessionOptions): void {
-  if (options.nativeSessionId !== undefined && options.nativeSessionId.trim() === '')
+function assertSessionRequest(request: OpenHarnessSessionOptions, resumable: boolean): void {
+  if (request.nativeSessionId?.trim() === '')
     throw new Error('OpenAI native session ID must not be empty');
-  if (options.tools?.length)
-    throw new Error('Custom tools are not connected to the OpenAI adapter yet');
-  if (options.mcpServers?.length) throw new Error('MCP is not connected to the OpenAI adapter yet');
-  if (options.skills) throw new Error('Skills are not connected to the OpenAI adapter yet');
+  if (request.nativeSessionId !== undefined && !resumable)
+    throw new Error('OpenAI session source does not support resume');
+}
+
+async function validateSessionConfig<C, A extends OpenAIAgent<C>>(
+  config: OpenAISessionConfig<C, A>,
+  requestedSessionId: string | undefined,
+): Promise<string> {
+  // Stream, session and signal are supplied unconditionally. These remaining keys would change authority.
+  for (const key of ['context', 'conversationId', 'previousResponseId']) {
+    if (config.runOptions !== undefined && key in config.runOptions) {
+      throw new Error(`OpenAI run option is wrapper-owned: ${key}`);
+    }
+  }
+
+  // Some backends create history lazily here. The ID binds history, not authorization.
+  const nativeSessionId = await config.session.getSessionId();
+  if (nativeSessionId.trim() === '') throw new Error('OpenAI native session ID must not be empty');
+  if (requestedSessionId !== undefined && requestedSessionId !== nativeSessionId) {
+    throw new Error('OpenAI session source did not preserve the requested native session ID');
+  }
+  return nativeSessionId;
+}
+
+async function closeFailedOpening<C, A extends OpenAIAgent<C>>(
+  config: OpenAISessionConfig<C, A>,
+  error: unknown,
+): Promise<never> {
+  // Release only resources explicitly transferred by the host; retain both failures if release fails.
+  try {
+    await config.dispose?.();
+  } catch (cleanupError) {
+    throw new AggregateError([error, cleanupError], 'OpenAI session opening and cleanup failed');
+  }
+  throw error;
 }

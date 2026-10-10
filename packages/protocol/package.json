@@ -18,7 +18,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@ag-ui/core": "1.0.2",
     "zod": "4.6.5"
   }
 }

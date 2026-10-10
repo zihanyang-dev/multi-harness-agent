@@ -95,9 +95,9 @@ function HomePage() {
           Current scope
         </h2>
         <p className="mt-3 leading-7 text-slate-600">
-          React, routing, queries, and styling are connected. Conversation tasks, authentication,
-          and agent SDK integrations are not implemented. This page does not submit agent tasks or
-          generate simulated replies.
+          React, routing, queries, and styling are connected. Conversation tasks and authentication
+          are not implemented. The OpenAI package adapter is not connected to this page, which does
+          not submit agent tasks or generate simulated replies.
         </p>
       </section>
     </div>

@@ -1,5 +1,4 @@
 export type {
-  HarnessCapabilities,
   HarnessId,
   HarnessInputPart,
   HarnessProvider,
@@ -9,11 +8,14 @@ export type {
   HarnessTurnResult,
   OpenHarnessSessionOptions,
 } from './contract.js';
-export type { HarnessMcpServer } from './mcp.js';
 export {
   type CreateOpenAIHarnessOptions,
   createOpenAIHarness,
-  type OpenAISessions,
+  type OpenAIHarness,
+  type OpenAIHarnessRunOptions,
+  type OpenAIResumeOptions,
+  type OpenAIRun,
+  type OpenAISession,
+  type OpenAISessionConfig,
+  type OpenAITurnResult,
 } from './openai/adapter.js';
-export type { HarnessSkillsOptions } from './skill.js';
-export type { ExecuteHarnessToolOptions, HarnessTool } from './tool.js';
