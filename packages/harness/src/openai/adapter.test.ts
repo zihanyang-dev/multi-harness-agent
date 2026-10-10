@@ -2,16 +2,227 @@ import { execFileSync } from 'node:child_process';
 import { setImmediate } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { EventType } from '@ag-ui/core';
+import { MemorySession, OpenAIConversationsSession } from '@openai/agents';
+import type OpenAI from 'openai';
 import { describe, expect, it } from 'vitest';
 
 import { createOpenAIClientFixture } from '../../tests/fixtures/openai-client.js';
-import { createOpenAIHarness } from '../index.js';
+import { createOpenAIHarness, type OpenAISessions } from '../index.js';
 
 describe('OpenAI native session', () => {
+  it('uses host-supplied SDK history across turns without calling Conversations', async () => {
+    const fixture = createOpenAIClientFixture();
+    fixture.enqueue('First answer', 'Second answer');
+    // SDK memory is deliberately test-only; this verifies wiring, not durable recovery.
+    const nativeSession = new MemorySession({ sessionId: 'host_session' });
+    const openedIds: (string | undefined)[] = [];
+    const provider = createOpenAIHarness({
+      client: fixture.client,
+      model: 'gpt-4.1',
+      sessions: {
+        resumable: false,
+        open: async (id) => {
+          openedIds.push(id);
+          return nativeSession;
+        },
+      },
+    });
+    const session = await provider.openSession({ cwd: process.cwd() });
+    try {
+      await (await session.run({ content: [{ type: 'text', text: 'First question' }] })).result;
+      const second = await session.run({ content: [{ type: 'text', text: 'Second question' }] });
+      const events = [];
+      for await (const event of second.events) events.push(event);
+      expect((await second.result).messages).toEqual([
+        { id: 'msg_fixture_2', role: 'assistant', content: 'Second answer' },
+      ]);
+      expect(events[0]).toMatchObject({
+        type: EventType.RUN_STARTED,
+        threadId: 'host_session',
+      });
+      expect(fixture.requests.map((request) => request.path)).toEqual(['/responses', '/responses']);
+      expect(fixture.requests[1]?.body?.input).toEqual([
+        { role: 'user', content: [{ type: 'input_text', text: 'First question' }] },
+        expect.objectContaining({ role: 'assistant' }),
+        { role: 'user', content: [{ type: 'input_text', text: 'Second question' }] },
+      ]);
+      expect(openedIds).toEqual([undefined]);
+    } finally {
+      await session.dispose();
+    }
+    // Disposing a wrapper must not clear the borrowed native history.
+    expect(await nativeSession.getItems()).toHaveLength(4);
+  });
+
+  it('keeps model transport separate from the explicitly selected Conversations store', async () => {
+    const model = createOpenAIClientFixture();
+    const history = createOpenAIClientFixture();
+    model.enqueue('First answer', 'Second answer');
+    const provider = createOpenAIHarness({
+      client: model.client,
+      model: 'gpt-4.1',
+      sessions: conversationSessions(history.client),
+    });
+    const first = await provider.openSession({ cwd: process.cwd() });
+    try {
+      await (await first.run({ content: [{ type: 'text', text: 'First question' }] })).result;
+    } finally {
+      await first.dispose();
+    }
+    const reopened = await provider.openSession({
+      cwd: process.cwd(),
+      nativeSessionId: first.nativeSessionId,
+    });
+    try {
+      await (await reopened.run({ content: [{ type: 'text', text: 'Second question' }] })).result;
+      expect(model.requests.map((request) => request.path)).toEqual(['/responses', '/responses']);
+      expect(model.requests[1]?.body?.input).toEqual([
+        expect.objectContaining({
+          role: 'user',
+          content: [{ type: 'input_text', text: 'First question' }],
+        }),
+        expect.objectContaining({ role: 'assistant' }),
+        expect.objectContaining({
+          role: 'user',
+          content: [{ type: 'input_text', text: 'Second question' }],
+        }),
+      ]);
+      expect(history.requests.some((request) => request.path === '/responses')).toBe(false);
+    } finally {
+      await reopened.dispose();
+    }
+  });
+
+  it('rejects resume admission before opening a non-resumable source', async () => {
+    const fixture = createOpenAIClientFixture();
+    let opened = false;
+    const provider = createOpenAIHarness({
+      client: fixture.client,
+      model: 'gpt-4.1',
+      sessions: {
+        resumable: false,
+        open: async () => {
+          opened = true;
+          return new MemorySession({ sessionId: 'requested_session' });
+        },
+      },
+    });
+    await expect(
+      provider.openSession({ cwd: process.cwd(), nativeSessionId: 'requested_session' }),
+    ).rejects.toThrow(/resume/);
+    expect(provider.capabilities.resume).toBe(false);
+    expect(opened).toBe(false);
+    expect(fixture.requests).toEqual([]);
+  });
+
+  it.each([
+    { requested: undefined, returned: '' },
+    { requested: undefined, returned: '  ' },
+    { requested: 'requested_session', returned: 'replacement_session' },
+  ])('rejects an invalid or replaced native identity (%j)', async ({ requested, returned }) => {
+    const fixture = createOpenAIClientFixture();
+    const provider = createOpenAIHarness({
+      client: fixture.client,
+      model: 'gpt-4.1',
+      sessions: {
+        resumable: true,
+        open: async () => new MemorySession({ sessionId: returned }),
+      },
+    });
+    await expect(
+      provider.openSession({
+        cwd: process.cwd(),
+        ...(requested !== undefined ? { nativeSessionId: requested } : {}),
+      }),
+    ).rejects.toThrow(/session ID/);
+    expect(fixture.requests).toEqual([]);
+  });
+
+  it('preserves a source opening failure without falling back to another backend', async () => {
+    const fixture = createOpenAIClientFixture();
+    const failure = new Error('Host storage unavailable');
+    const provider = createOpenAIHarness({
+      client: fixture.client,
+      model: 'gpt-4.1',
+      sessions: {
+        resumable: true,
+        open: async () => {
+          throw failure;
+        },
+      },
+    });
+    await expect(provider.openSession({ cwd: process.cwd() })).rejects.toBe(failure);
+    expect(fixture.requests).toEqual([]);
+  });
+
+  it('reopens host-supplied native items in a new provider without Conversations', async () => {
+    const fixture = createOpenAIClientFixture();
+    fixture.enqueue('First answer', 'Second answer');
+    const original = new MemorySession({ sessionId: 'host_snapshot' });
+    const openedIds: (string | undefined)[] = [];
+    // This source reopens process-local SDK snapshots, not durable production storage.
+    const configuration = {
+      client: fixture.client,
+      model: 'gpt-4.1',
+      sessions: {
+        resumable: true,
+        open: async (id?: string) => {
+          openedIds.push(id);
+          if (id === undefined) return original;
+          return new MemorySession({ sessionId: id, initialItems: await original.getItems() });
+        },
+      },
+    };
+    const first = await createOpenAIHarness(configuration).openSession({ cwd: process.cwd() });
+    try {
+      await (await first.run({ content: [{ type: 'text', text: 'First question' }] })).result;
+    } finally {
+      await first.dispose();
+    }
+    const reopened = await createOpenAIHarness(configuration).openSession({
+      cwd: process.cwd(),
+      nativeSessionId: first.nativeSessionId,
+    });
+    try {
+      await (await reopened.run({ content: [{ type: 'text', text: 'Second question' }] })).result;
+      expect(reopened.nativeSessionId).toBe('host_snapshot');
+      expect(openedIds).toEqual([undefined, 'host_snapshot']);
+      expect(fixture.requests.map((request) => request.path)).toEqual(['/responses', '/responses']);
+      expect(fixture.requests[1]?.body?.input).toEqual([
+        { role: 'user', content: [{ type: 'input_text', text: 'First question' }] },
+        expect.objectContaining({ role: 'assistant' }),
+        { role: 'user', content: [{ type: 'input_text', text: 'Second question' }] },
+      ]);
+    } finally {
+      await reopened.dispose();
+    }
+  });
+
+  it('preserves a native identity lookup failure before returning a wrapper', async () => {
+    const fixture = createOpenAIClientFixture();
+    const nativeSession = new MemorySession();
+    const failure = new Error('Host identity lookup failed');
+    // Fail only the host's async identity lookup, retaining the real SDK history methods.
+    nativeSession.getSessionId = async () => {
+      throw failure;
+    };
+    const provider = createOpenAIHarness({
+      client: fixture.client,
+      model: 'gpt-4.1',
+      sessions: { resumable: true, open: async () => nativeSession },
+    });
+    await expect(provider.openSession({ cwd: process.cwd() })).rejects.toBe(failure);
+    expect(fixture.requests).toEqual([]);
+  });
+
   it('runs through the real SDK and exposes the existing text projection', async () => {
     const fixture = createOpenAIClientFixture();
     fixture.enqueue('Hello');
-    const provider = createOpenAIHarness({ client: fixture.client, model: 'gpt-4.1' });
+    const provider = createOpenAIHarness({
+      client: fixture.client,
+      sessions: conversationSessions(fixture.client),
+      model: 'gpt-4.1',
+    });
     const session = await provider.openSession({ cwd: process.cwd() });
 
     try {
@@ -39,7 +250,11 @@ describe('OpenAI native session', () => {
   it('reopens Conversations history using its native ID rather than public messages', async () => {
     const fixture = createOpenAIClientFixture();
     fixture.enqueue('First answer', 'Second answer');
-    const provider = createOpenAIHarness({ client: fixture.client, model: 'gpt-4.1' });
+    const provider = createOpenAIHarness({
+      client: fixture.client,
+      sessions: conversationSessions(fixture.client),
+      model: 'gpt-4.1',
+    });
     const original = await provider.openSession({ cwd: process.cwd() });
     await (await original.run({ content: [{ type: 'text', text: 'First question' }] })).result;
     await original.dispose();
@@ -75,6 +290,7 @@ describe('OpenAI native session', () => {
     fixture.enqueue('First answer', 'Second answer');
     const session = await createOpenAIHarness({
       client: fixture.client,
+      sessions: conversationSessions(fixture.client),
       model: 'gpt-4.1',
     }).openSession({ cwd: process.cwd() });
 
@@ -96,6 +312,7 @@ describe('OpenAI native session', () => {
     fixture.enqueue('Hello');
     const session = await createOpenAIHarness({
       client: fixture.client,
+      sessions: conversationSessions(fixture.client),
       model: 'gpt-4.1',
     }).openSession({ cwd: process.cwd() });
     const run = await session.run({ content: [{ type: 'text', text: 'Start' }] });
@@ -129,6 +346,7 @@ describe('OpenAI native session', () => {
     fixture.enqueue('Hello');
     const session = await createOpenAIHarness({
       client: fixture.client,
+      sessions: conversationSessions(fixture.client),
       model: 'gpt-4.1',
     }).openSession({ cwd: process.cwd() });
     const run = await session.run({ content: [{ type: 'text', text: 'Start' }] });
@@ -171,6 +389,7 @@ describe('OpenAI native session', () => {
     fixture.enqueue('Hello');
     const session = await createOpenAIHarness({
       client: fixture.client,
+      sessions: conversationSessions(fixture.client),
       model: 'gpt-4.1',
     }).openSession({ cwd: process.cwd() });
     const run = await session.run({ content: [{ type: 'text', text: 'Start' }] });
@@ -205,7 +424,11 @@ describe('OpenAI native session', () => {
     'rejects an empty resume identity without creating new history (%j)',
     async (nativeSessionId) => {
       const fixture = createOpenAIClientFixture();
-      const provider = createOpenAIHarness({ client: fixture.client, model: 'gpt-4.1' });
+      const provider = createOpenAIHarness({
+        client: fixture.client,
+        sessions: conversationSessions(fixture.client),
+        model: 'gpt-4.1',
+      });
       await expect(provider.openSession({ cwd: process.cwd(), nativeSessionId })).rejects.toThrow(
         /session ID/,
       );
@@ -226,6 +449,7 @@ describe('OpenAI native session', () => {
     });
     const session = await createOpenAIHarness({
       client: fixture.client,
+      sessions: conversationSessions(fixture.client),
       model: 'gpt-4.1',
     }).openSession({ cwd: process.cwd() });
     const pending = session.run({ content: [{ type: 'text', text: 'Start' }] });
@@ -269,6 +493,7 @@ describe('OpenAI native session', () => {
     fixture.enqueue('Answer');
     const session = await createOpenAIHarness({
       client: fixture.client,
+      sessions: conversationSessions(fixture.client),
       model: 'gpt-4.1',
     }).openSession({ cwd: process.cwd() });
     const run = await session.run({ content: [{ type: 'text', text: 'Start' }] });
@@ -287,8 +512,10 @@ describe('OpenAI native session', () => {
     fixture.enqueue('Answer');
     const session = await createOpenAIHarness({
       client: fixture.client,
+      sessions: conversationSessions(fixture.client),
       model: 'configured-model',
       instructions: 'Be concise.',
+      modelSettings: { store: false, temperature: 0.2 },
     }).openSession({ cwd: process.cwd() });
     try {
       await (
@@ -302,6 +529,8 @@ describe('OpenAI native session', () => {
       expect(fixture.requests.find((item) => item.path === '/responses')?.body).toMatchObject({
         model: 'configured-model',
         instructions: 'Be concise.',
+        store: false,
+        temperature: 0.2,
         input: [
           {
             role: 'user',
@@ -322,6 +551,7 @@ describe('OpenAI native session', () => {
     fixture.enqueue('Answer');
     const session = await createOpenAIHarness({
       client: fixture.client,
+      sessions: conversationSessions(fixture.client),
       model: 'gpt-4.1',
     }).openSession({ cwd: process.cwd() });
     const requestCount = fixture.requests.length;
@@ -353,6 +583,7 @@ describe('OpenAI native session', () => {
     fixture.enqueue('Recovered');
     const session = await createOpenAIHarness({
       client: fixture.client,
+      sessions: conversationSessions(fixture.client),
       model: 'gpt-4.1',
     }).openSession({ cwd: process.cwd() });
     try {
@@ -384,6 +615,7 @@ describe('OpenAI native session', () => {
     fixture.enqueue('Answer');
     const session = await createOpenAIHarness({
       client: fixture.client,
+      sessions: conversationSessions(fixture.client),
       model: 'gpt-4.1',
     }).openSession({ cwd: process.cwd() });
     const run = await session.run({ content: [{ type: 'text', text: 'Start' }] });
@@ -417,6 +649,7 @@ describe('OpenAI native session', () => {
     fixture.enqueue('Unsaved', 'Recovered');
     const session = await createOpenAIHarness({
       client: fixture.client,
+      sessions: conversationSessions(fixture.client),
       model: 'gpt-4.1',
     }).openSession({ cwd: process.cwd() });
     try {
@@ -447,6 +680,7 @@ describe('OpenAI native session', () => {
     fixture.enqueue('Recovered');
     const session = await createOpenAIHarness({
       client: fixture.client,
+      sessions: conversationSessions(fixture.client),
       model: 'gpt-4.1',
     }).openSession({ cwd: process.cwd() });
     try {
@@ -475,6 +709,7 @@ describe('OpenAI native session', () => {
     fixture.enqueue('First', 'Second');
     const session = await createOpenAIHarness({
       client: fixture.client,
+      sessions: conversationSessions(fixture.client),
       model: 'gpt-4.1',
     }).openSession({ cwd: process.cwd() });
     const first = await session.run({ content: [{ type: 'text', text: 'First' }] });
@@ -505,6 +740,7 @@ describe('OpenAI native session', () => {
     fixture.enqueue('Answer');
     const session = await createOpenAIHarness({
       client: fixture.client,
+      sessions: conversationSessions(fixture.client),
       model: 'gpt-4.1',
     }).openSession({ cwd: process.cwd() });
     const run = await session.run({ content: [{ type: 'text', text: 'Start' }] });
@@ -525,6 +761,7 @@ describe('OpenAI native session', () => {
     fixture.enqueue('Answer');
     const session = await createOpenAIHarness({
       client: fixture.client,
+      sessions: conversationSessions(fixture.client),
       model: 'gpt-4.1',
     }).openSession({ cwd: process.cwd() });
     const run = await session.run({ content: [{ type: 'text', text: 'Start' }] });
@@ -548,6 +785,7 @@ describe('OpenAI native session', () => {
     // Node must remain alive when the host ignores both outputs; do not mask rejection in the child.
     const script = `
       import { setImmediate } from 'node:timers/promises';
+      import { OpenAIConversationsSession } from '@openai/agents';
       import { createOpenAIHarness } from './src/index.ts';
       import { createOpenAIClientFixture } from './tests/fixtures/openai-client.ts';
       const reached = Promise.withResolvers();
@@ -555,7 +793,17 @@ describe('OpenAI native session', () => {
         if (request.path === '/responses') reached.resolve();
       } });
       fixture.enqueueError(503);
-      const session = await createOpenAIHarness({ client: fixture.client, model: 'gpt-4.1' })
+      const session = await createOpenAIHarness({
+        client: fixture.client,
+        model: 'gpt-4.1',
+        sessions: {
+          resumable: true,
+          open: async (id) => new OpenAIConversationsSession({
+            client: fixture.client,
+            ...(id !== undefined ? { conversationId: id } : {}),
+          }),
+        },
+      })
         .openSession({ cwd: process.cwd() });
       await session.run({ content: [{ type: 'text', text: 'Fail' }] });
       await reached.promise;
@@ -582,6 +830,7 @@ describe('OpenAI native session', () => {
     const fixture = createOpenAIClientFixture();
     const session = await createOpenAIHarness({
       client: fixture.client,
+      sessions: conversationSessions(fixture.client),
       model: 'gpt-4.1',
     }).openSession({ cwd: process.cwd(), nativeSessionId: 'conv_missing' });
     try {
@@ -595,7 +844,11 @@ describe('OpenAI native session', () => {
 
   it('does not open storage for capabilities that are not connected yet', async () => {
     const fixture = createOpenAIClientFixture();
-    const provider = createOpenAIHarness({ client: fixture.client, model: 'gpt-4.1' });
+    const provider = createOpenAIHarness({
+      client: fixture.client,
+      sessions: conversationSessions(fixture.client),
+      model: 'gpt-4.1',
+    });
 
     await expect(
       provider.openSession({ cwd: process.cwd(), skills: { directories: ['skills'] } }),
@@ -622,3 +875,15 @@ describe('OpenAI native session', () => {
     expect(fixture.requests).toEqual([]);
   });
 });
+
+/** Explicit SDK backend for the existing remote-history lifecycle regressions. */
+function conversationSessions(client: OpenAI): OpenAISessions {
+  return {
+    resumable: true,
+    open: async (nativeSessionId) =>
+      new OpenAIConversationsSession({
+        client,
+        ...(nativeSessionId !== undefined ? { conversationId: nativeSessionId } : {}),
+      }),
+  };
+}

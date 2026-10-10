@@ -12,9 +12,11 @@
 
 ## 当前可用入口
 
-`createOpenAIHarness({ client, model, instructions? })` 由可信 host 显式装配，固定配置不混入 session 或 turn。最小实现支持有序文本输入、文本事件与结果、原生 Conversations 历史续轮、本 wrapper 内的单 writer、请求中断及等待收尾的 dispose。
+`createOpenAIHarness({ client, model, sessions, instructions?, modelSettings? })` 由可信 host 显式装配，固定配置不混入 session 或 turn。模型服务与会话后端独立：必填的 `sessions` 通过 `open(nativeSessionId?)` 返回官方 SDK `Session`，`resumable` 声明 host 已验证的恢复能力。packages 不选择文件／数据库，不提供默认 Conversations 或内存回退；业务侧负责授权、存储与连接生命周期。原先只传 client／model 的 OpenAI 装配需要更新，公共多 harness 契约不变。
 
-这是可调用的文本接入，不是完整通用 Agent 或生产恢复验收。文件输入、工具、MCP、Skills 和公开推理摘要尚未接入；请求不会被静默忽略。`cwd` 不改变普通 SDK Agent 的进程工作目录，也不授予文件系统访问。详细使用与边界见 [OpenAI 接入](src/openai/README.md)。
+最小实现支持有序文本输入、文本事件与结果、SDK 原生历史续轮、本 wrapper 内的单 writer、请求中断及等待收尾的 dispose。`resume` 取决于所选会话装配；同一 ID 重开不是跨后端迁移或任意执行 checkpoint 恢复。
+
+当前公共 adapter 已通过一次兼容网关的真实两轮文本验收：官方 MemorySession、`resumable: false`，验证流式输出、最终结果和同会话原生历史，不依赖 Conversations。这不是完整通用 Agent 或生产持久恢复验收。文件输入、工具、MCP、Skills 和公开推理摘要尚未接入；请求不会被静默忽略。`cwd` 不改变普通 SDK Agent 的进程工作目录，也不授予文件系统访问。详细使用与边界见 [OpenAI 接入](src/openai/README.md)。
 
 ## 契约组织
 

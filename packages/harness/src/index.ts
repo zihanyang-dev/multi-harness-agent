@@ -10,6 +10,10 @@ export type {
   OpenHarnessSessionOptions,
 } from './contract.js';
 export type { HarnessMcpServer } from './mcp.js';
-export { type CreateOpenAIHarnessOptions, createOpenAIHarness } from './openai/adapter.js';
+export {
+  type CreateOpenAIHarnessOptions,
+  createOpenAIHarness,
+  type OpenAISessions,
+} from './openai/adapter.js';
 export type { HarnessSkillsOptions } from './skill.js';
 export type { ExecuteHarnessToolOptions, HarnessTool } from './tool.js';

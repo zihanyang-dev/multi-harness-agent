@@ -2,10 +2,11 @@ import { randomUUID } from 'node:crypto';
 import {
   Agent,
   type AgentInputItem,
-  OpenAIConversationsSession,
+  type ModelSettings,
   OpenAIResponsesModel,
   type RunItem,
   Runner,
+  type Session,
 } from '@openai/agents';
 import { APIUserAbortError, type default as OpenAI } from 'openai';
 
@@ -19,11 +20,24 @@ import type {
 } from '../contract.js';
 import { createRunEvents, toMessages } from './output.js';
 
+/**
+ * Opens native SDK sessions through the host's explicitly selected backend.
+ *
+ * The host owns storage connections and cross-wrapper write serialization. Requested IDs
+ * must be preserved. Declare resumable only after verifying history survives reopening.
+ */
+export interface OpenAISessions {
+  readonly resumable: boolean;
+  open: (nativeSessionId?: string) => Promise<Session>;
+}
+
 /** Fixed provider configuration; session identity and turn input belong to the public contract. */
 export interface CreateOpenAIHarnessOptions {
   client: OpenAI;
   model: string;
+  sessions: OpenAISessions;
   instructions?: string;
+  modelSettings?: ModelSettings;
 }
 
 interface ActiveTurn {
@@ -41,7 +55,7 @@ interface NativeTurnOutput {
 /** Native dependencies and lifecycle belong to this wrapper, not to event readers. */
 interface SessionState {
   readonly nativeSessionId: string;
-  readonly nativeSession: OpenAIConversationsSession;
+  readonly nativeSession: Session;
   readonly agent: Agent;
   readonly runner: Runner;
   active: ActiveTurn | undefined;
@@ -49,17 +63,17 @@ interface SessionState {
 }
 
 /**
- * Creates the text-only adapter around the official Runner and Conversations store.
+ * Creates the text-only adapter around the official Runner and host-supplied SDK sessions.
  *
- * The host owns the client and cross-wrapper write serialization. Opening a new session
- * creates remote history; disposing a wrapper does not delete it. SDK tracing is disabled.
+ * Model transport and history storage are independent. Disposing a wrapper does not clear
+ * history or close host-owned connections. SDK tracing is disabled.
  */
 export function createOpenAIHarness(options: CreateOpenAIHarnessOptions): HarnessProvider {
   return {
     id: 'openai',
     // These describe this adapter's current boundary, not everything the SDK can support.
     capabilities: {
-      resume: true,
+      resume: options.sessions.resumable,
       steer: false,
       visibleReasoning: false,
       customTools: false,
@@ -75,15 +89,23 @@ async function openSession(
   options: OpenHarnessSessionOptions,
 ): Promise<HarnessSession> {
   assertSessionOptions(options);
-  const nativeSession = new OpenAIConversationsSession({
-    client: configuration.client,
-    ...(options.nativeSessionId !== undefined ? { conversationId: options.nativeSessionId } : {}),
-  });
+  if (options.nativeSessionId !== undefined && !configuration.sessions.resumable)
+    throw new Error('OpenAI session source does not support resume');
+
+  // Backend selection belongs to the host; opening failures must not trigger a fallback.
+  const nativeSession = await configuration.sessions.open(options.nativeSessionId);
   const nativeSessionId = await nativeSession.getSessionId();
+  if (nativeSessionId.trim() === '') throw new Error('OpenAI native session ID must not be empty');
+  if (options.nativeSessionId !== undefined && nativeSessionId !== options.nativeSessionId)
+    throw new Error('OpenAI session source did not preserve the requested native session ID');
+
   const agent = new Agent({
     name: 'Assistant',
     instructions: configuration.instructions ?? '',
     model: new OpenAIResponsesModel(configuration.client, configuration.model),
+    ...(configuration.modelSettings !== undefined
+      ? { modelSettings: configuration.modelSettings }
+      : {}),
   });
 
   // One wrapper owns this lifecycle. Other writers of the same native ID require host serialization.
@@ -126,13 +148,18 @@ async function runTurn(input: HarnessTurnInput, state: SessionState): Promise<Ha
 
     // Execution is independent of readers; observe failures even if neither output is consumed.
     void result.catch(() => {});
-    return {
+
+    // Closing an observer must not cancel the execution owned by this wrapper.
+    const stream = nativeRun.toStream().values({ preventCancel: true });
+    const events = createRunEvents(stream, {
+      threadId: state.nativeSessionId,
+      runId: randomUUID(),
       result,
-      events: createRunEvents(nativeRun.toStream().values({ preventCancel: true }), {
-        threadId: state.nativeSessionId,
-        runId: randomUUID(),
-        result,
-      }),
+    });
+
+    return {
+      events,
+      result,
       async interrupt() {
         // A retained handle from an older turn must not interrupt a newer one.
         if (state.active === turn) turn.controller.abort();
@@ -181,7 +208,7 @@ function disposeSession(state: SessionState): Promise<void> {
   if (state.disposal) return state.disposal;
   state.active?.controller.abort();
   state.disposal = state.active?.settlement.promise ?? Promise.resolve();
-  // Releasing this wrapper must not delete the remote conversation or close the borrowed client.
+  // Releasing this wrapper must not clear native history or close host-owned connections.
   return state.disposal;
 }
 
