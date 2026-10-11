@@ -1,5 +1,7 @@
 # Harness 原生接入重新审查
 
+> 本文保留 `61b608c` 发布时的 Pi／OpenAI 审查与证据。随后完成的 Claude 包级文本接入、独立审查与测试网关验收见 [Claude 审查](claude-review.md)；下文“Claude 未实现”属于当时快照，不是当前能力状态。
+
 本轮重新读取官方文档、精读六个业内实际接入方案，并逐函数审查整个 `packages/harness`，不沿用上一轮“已审查所以没有问题”的判断。
 
 结论：**已实现的 Pi／OpenAI 保持小型一致外部合同，内部沿用各自官方执行与状态 authority；本轮修复三处 OpenAI authority capture 缺陷。没有理由引入第四执行框架、portable 工具层或统一 checkpoint。** 这不是“三个 SDK 已全部完成”或“代码已经绝对完美”的证明：Claude 未实现，产品、隔离与恢复边界也未全量验收。

@@ -1,3 +1,12 @@
+export {
+  type ClaudeHarness,
+  type ClaudeRun,
+  type ClaudeSession,
+  type ClaudeSessionConfig,
+  type ClaudeTurnResult,
+  type CreateClaudeHarnessOptions,
+  createClaudeHarness,
+} from './claude/adapter.js';
 export type {
   HarnessId,
   HarnessInputPart,

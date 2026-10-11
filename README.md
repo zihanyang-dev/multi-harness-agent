@@ -12,13 +12,14 @@
 - Harness / Sandbox 初始契约与官方 SDK 依赖，不另建 portable Tool／MCP／Skills 契约。
 - OpenAI 原生 factory adapter：有序输入、文本观察、原生审批与本地 execution ownership；尚未接入产品 API。
 - Pi 原生 AgentSession binding：文本执行、原生 history／工具、完整文本观察与取消／释放；尚未接入产品 API。
+- Claude 原生 Query binding：持续文本会话、UUID receipt、native resume／MCP／schema、完整文本观察与 interrupt／释放；尚未接入产品 API。
 - BullMQ / Redis、SQL、认证、S3、遥测的依赖归属。
 - 格式、lint、类型检查、单元测试、构建、浏览器 smoke 和 CI。
 - 本地 PostgreSQL / Redis Compose，Server / Worker 非 root 镜像入口。
 
 ## 未实现
 
-Thread / 消息业务 API、迁移与 outbox、任务消费者、公开事件分发、认证接入、成果交付、Claude adapter、E2B adapter、评测数据集与评分器。
+Thread / 消息业务 API、迁移与 outbox、任务消费者、公开事件分发、认证接入、成果交付、E2B adapter、评测数据集与评分器。
 
 Worker 入口只说明未注册执行器并退出，**不会连接 Redis 或领取任务**。运行检查不会调用模型、创建 sandbox 或使用云端凭证。
 
@@ -67,7 +68,7 @@ apps/
   server/                    # HTTP 与产品入口
   worker/                    # 执行监督；尚未注册消费者
 packages/
-  harness/                   # 公共契约与 OpenAI／Pi 原生接入
+  harness/                   # 公共契约与 OpenAI／Pi／Claude 原生接入
   sandbox/                   # 管理权限与单环境能力分开
   protocol/                  # 跨边界 schema
 
@@ -93,3 +94,5 @@ docs/
 - [OpenAI 代码审查与验收边界](docs/openai-review.md)
 - [Pi 接入与限制](packages/harness/src/pi/README.md)
 - [Pi 代码审查与验收边界](docs/pi-review.md)
+- [Claude 接入与限制](packages/harness/src/claude/README.md)
+- [Claude 调研、审查与验收边界](docs/claude-review.md)

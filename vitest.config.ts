@@ -6,8 +6,12 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
-    // Pi session.test.ts owns the clean child process that executes session.sdk.test.ts.
-    exclude: [...configDefaults.exclude, 'packages/harness/src/pi/session.sdk.test.ts'],
+    // Native session.test.ts launchers own clean child processes for SDK suites.
+    exclude: [
+      ...configDefaults.exclude,
+      'packages/harness/src/pi/session.sdk.test.ts',
+      'packages/harness/src/claude/session.sdk.test.ts',
+    ],
     include: [
       'apps/**/src/**/*.test.ts',
       'packages/**/src/**/*.test.ts',

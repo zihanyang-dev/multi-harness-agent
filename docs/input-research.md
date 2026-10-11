@@ -106,7 +106,7 @@
 
 ## 6. 历史离线 SDK 接入实验
 
-下述记录属于旧快照。当时的代码位于 `packages/harness/tests/sdk/`，素材位于 `packages/harness/tests/fixtures/media.ts`；这些文件现已删除，下面的旧命令不能在当前工作区重跑。这是历史 SDK 接入／契约证据，不是新版验收或任务效果评测。当前验证入口为相邻 OpenAI 测试与 Pi 独立离线 native suite；新的 Pi 实现和真实模型证据见 [Pi 审查](pi-review.md)，不运行真实 Claude CLI。
+下述记录属于旧快照。当时的代码位于 `packages/harness/tests/sdk/`，素材位于 `packages/harness/tests/fixtures/media.ts`；这些文件现已删除，下面的旧命令不能在当前工作区重跑。这是历史 SDK 接入／契约证据，不是新版验收或任务效果评测。当前验证入口为相邻 OpenAI 测试及 Pi／Claude 独立离线 native suite；新的 Pi 实现和真实模型证据见 [Pi 审查](pi-review.md)。Claude 文本接入与另行授权的原生 CLI／腾讯云测试网关验收见 [Claude 审查](claude-review.md)，不与下述旧 stdin 实验混算。
 
 三个执行 fixture 按 `pi-session`、`openai-responses`、`claude-stdin` 命名，通过公开 SDK 入口运行，不调用私有 converter、不下钻 `session.agent`、不自建 loop。图片是合成的 1×1 PNG，PDF 是合成单页文档。主样本为 text A → red image → text B → blue image → text C；OpenAI / Claude 再追加 PDF 与 text D。
 
@@ -151,7 +151,7 @@ Claude 报告中的 `fixtureCleanup` 仅检查测试替身完成收尾，不作�
 4. 视频／音频可作为资源引用不等于可原生理解；Responses 的 file URL 转换成功也不等于供应商接受其 MIME。抽帧／转录属于另外的已授权处理，不假装原样输入。
 5. 输入类型已调整；旧 `tests/input.test-d.ts` 已删除。当前 OpenAI adapter 已接入有序文字／图片／通用文件映射，相邻测试覆盖可见字节快照与官方 Responses 转换器的请求构造；不代表真实模型接受或理解所有 MIME。host 来源准备、文件传输、业务上传及媒体处理仍未实现。
 
-下一阶段仍需验证 Claude 原生 CLI 请求与保存／恢复、真实模型的素材接受、授权来源过期、更多工具内容分支和 compaction 后的语义。需要网络模型验收时另行明确范围与凭据，不默认上传用户私有素材。
+Claude 文本切片已另行验证原生 CLI、磁盘 history 重开与真实 SDK MCP loop，见独立审查；真实模型的素材接受、授权来源过期、更多工具内容分支和 compaction 后的语义仍需专项验收。需要网络模型验收时另行明确范围与凭据，不默认上传用户私有素材。
 
 ## 7. 证据范围与来源
 

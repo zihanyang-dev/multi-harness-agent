@@ -9,6 +9,11 @@
       "development": "./src/index.ts",
       "default": "./dist/index.js"
     },
+    "./claude": {
+      "types": "./dist/claude/adapter.d.ts",
+      "development": "./src/claude/adapter.ts",
+      "default": "./dist/claude/adapter.js"
+    },
     "./openai": {
       "types": "./dist/openai/adapter.d.ts",
       "development": "./src/openai/adapter.ts",
