@@ -10,6 +10,7 @@ export interface WorkerConfig {
   maxRunMs: number;
   binding: PiBinding;
   prefix: string;
+  webSearch?: { apiKey: string };
 }
 
 /** A deployment supplies one explicit native profile; no personal Pi credential discovery. */
@@ -36,10 +37,23 @@ export function readWorkerConfig(environment: NodeJS.ProcessEnv): WorkerConfig |
   const binding = PiBindingSchema.parse({
     harness: 'pi',
     sdkVersion: '1.1.0',
-    policy: 'text-v1',
+    policy: environment.PI_POLICY ?? 'text-v1',
     provider: environment.PI_PROVIDER,
     model: environment.PI_MODEL,
     storageId: environment.PI_STORAGE_ID,
   });
-  return { databaseURL, redisURL, stateRoot, apiKey, maxRunMs, binding, prefix: 'mha' };
+  const webSearch =
+    binding.policy === 'web-search-v1'
+      ? { apiKey: z.string().trim().min(1).parse(environment.TAVILY_API_KEY) }
+      : undefined;
+  return {
+    databaseURL,
+    redisURL,
+    stateRoot,
+    apiKey,
+    maxRunMs,
+    binding,
+    prefix: 'mha',
+    ...(webSearch ? { webSearch } : {}),
+  };
 }

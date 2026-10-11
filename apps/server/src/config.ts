@@ -39,7 +39,7 @@ export function readServerConfig(environment: NodeJS.ProcessEnv): ServerConfig {
   const binding = PiBindingSchema.parse({
     harness: 'pi',
     sdkVersion: '1.1.0',
-    policy: 'text-v1',
+    policy: environment.PI_POLICY ?? 'text-v1',
     provider: environment.PI_PROVIDER,
     model: environment.PI_MODEL,
     storageId: environment.PI_STORAGE_ID,

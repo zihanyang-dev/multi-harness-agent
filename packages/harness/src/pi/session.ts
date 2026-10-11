@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-
+import { type ActivityChannel, createActivityChannel } from '../activity-channel.js';
 import type {
   HarnessRun,
   HarnessSession,
@@ -12,6 +12,7 @@ import { toNativeInput } from './request.js';
 
 interface Execution {
   done: PromiseWithResolvers<void>;
+  activity: ActivityChannel;
   interruptRequested: boolean;
   stopping: Promise<void> | undefined;
 }
@@ -28,7 +29,11 @@ interface SessionState {
 export function createPiSession(config: PiSessionConfig, nativeSessionId: string): HarnessSession {
   // Snapshot host bindings and options, not the borrowed native session graph.
   const state: SessionState = {
-    config: { ...config, promptOptions: { ...config.promptOptions } },
+    config: {
+      ...config,
+      ...(config.publicTools === undefined ? {} : { publicTools: config.publicTools.slice() }),
+      promptOptions: { ...config.promptOptions },
+    },
     nativeSessionId,
     disposed: false,
     active: undefined,
@@ -50,6 +55,7 @@ async function runSession(state: SessionState, input: HarnessTurnInput): Promise
   );
   const execution: Execution = {
     done: Promise.withResolvers<void>(),
+    activity: createActivityChannel(),
     interruptRequested: false,
     stopping: undefined,
   };
@@ -59,7 +65,12 @@ async function runSession(state: SessionState, input: HarnessTurnInput): Promise
   // Keep the original result observable even when neither output is consumed.
   void result.catch(() => undefined);
   return {
-    events: createRunEvents({ threadId: state.nativeSessionId, runId: randomUUID(), result }),
+    events: createRunEvents({
+      threadId: state.nativeSessionId,
+      runId: randomUUID(),
+      result,
+      activity: execution.activity,
+    }),
     result,
     interrupt: () => interruptExecution(state, execution),
   };
@@ -74,10 +85,15 @@ async function settleRun(
   const { session, promptOptions } = state.config;
   let unsubscribe: (() => void) | undefined;
   try {
-    const subscription = subscribeRun(session, () => {
-      // Pi has no preflight AbortSignal. Reissue an early request when native execution starts.
-      if (execution.interruptRequested) requestInterruption(state, execution);
-    });
+    const subscription = subscribeRun(
+      session,
+      () => {
+        // Pi has no preflight AbortSignal. Reissue an early request when native execution starts.
+        if (execution.interruptRequested) requestInterruption(state, execution);
+      },
+      execution.activity,
+      state.config.publicTools,
+    );
     unsubscribe = subscription.unsubscribe;
     // Preserve host prompt options; this text-only slice supplies no images.
     await session.prompt(text, { ...promptOptions, images: [] });
@@ -88,6 +104,7 @@ async function settleRun(
     return { status, messages: toMessages(session.sessionManager.getBranch(), previousEntryIds) };
   } finally {
     unsubscribe?.();
+    execution.activity.close();
     state.active = undefined;
     execution.done.resolve();
   }

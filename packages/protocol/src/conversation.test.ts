@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { SubmitTurnSchema, ThreadSchema, TurnInputSchema, TurnSchema } from './index.js';
+import {
+  SubmitTurnSchema,
+  ThreadListSchema,
+  ThreadSchema,
+  ThreadSummarySchema,
+  TurnInputSchema,
+  TurnSchema,
+} from './index.js';
 
 const id = '2fb67986-2782-4b2d-bdbb-bb397be5d744';
 const threadId = '92f9362b-0675-493c-8b86-efc40b88854c';
@@ -232,5 +239,45 @@ describe('TurnSchema', () => {
         expect(TurnSchema.safeParse({ ...turn, [field]: 'private' }).success).toBe(false);
       }
     },
+  );
+});
+
+describe('Thread list DTOs', () => {
+  const summary = { id: threadId, harness: 'pi', createdAt: timestamp, title: 'New conversation' };
+  it('accepts strict public summaries and nullable UUID cursors', () => {
+    expect(ThreadSummarySchema.parse(summary)).toEqual(summary);
+    for (const nextCursor of [null, threadId]) {
+      const page = { threads: [summary], nextCursor };
+      expect(ThreadListSchema.parse(page)).toEqual(page);
+    }
+    expect(ThreadSummarySchema.parse({ ...summary, title: 'x'.repeat(120) }).title).toHaveLength(
+      120,
+    );
+  });
+  it('rejects invalid previews and private or widened page fields', () => {
+    for (const value of [
+      { ...summary, title: '' },
+      { ...summary, title: 'x'.repeat(121) },
+      { ...summary, binding: {} },
+      { ...summary, nativeSessionId: 'private' },
+    ])
+      expect(ThreadSummarySchema.safeParse(value).success).toBe(false);
+    for (const page of [
+      { threads: [summary], nextCursor: 'bad' },
+      { threads: [summary] },
+      { threads: [summary], nextCursor: null, ownerId: id },
+    ])
+      expect(ThreadListSchema.safeParse(page).success).toBe(false);
+    expect(ThreadSchema.safeParse(summary).success).toBe(false);
+  });
+});
+
+it('accepts optional public tool capabilities but never arbitrary tool names or duplicates', () => {
+  const thread = { id: threadId, harness: 'pi', createdAt: timestamp };
+  expect(ThreadSchema.parse({ ...thread, tools: ['web_search'] }).tools).toEqual(['web_search']);
+  expect(ThreadSchema.parse({ ...thread, tools: [] }).tools).toEqual([]);
+  expect(ThreadSchema.safeParse({ ...thread, tools: ['bash'] }).success).toBe(false);
+  expect(ThreadSchema.safeParse({ ...thread, tools: ['web_search', 'web_search'] }).success).toBe(
+    false,
   );
 });

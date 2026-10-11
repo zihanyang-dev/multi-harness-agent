@@ -20,6 +20,7 @@ apps/server/src/
     http.ts                     # 认证、Origin、DTO、HTTP 状态映射
     submission.ts               # 捕获不可变输入、纯 replay 决策
     command-publication.ts      # outbox 到 BullMQ 的交接与重发现
+    activity-stream.ts          # 归属核对、Redis Streams 回放与 SSE 观察
   db/
     threads.ts                  # 创建与按归属读取 Thread
     submissions.ts              # 授权、锁、重放、准入、Turn / outbox 原子接受
@@ -42,9 +43,11 @@ apps/worker/src/
   worker.ts                     # BullMQ intake、合作取消、joined drain
   execution/
     execute-turn.ts             # claim → open → invoke → join → 正式结算
+    activity-publication.ts     # 白名单公开活动、有界写入与观察收尾
     db/turns.ts                 # claim、native allocation、控制读取、fenced finish
   harness/pi/
     host.ts                     # 产品文本策略与授权的精确 native history 装配
+    web-search.ts               # 可选部署工具、固定 provider、有界来源结果
 ```
 
 执行侧 SQL 使用可信 notification 查找 Thread，再按 Thread → Turn → Attempt 的锁序完成整体动作；不调用 Server 的用户授权函数，也不导入 Server 的产品代码。Worker 不扫描产品 outbox、不拥有 producer Queue。
@@ -54,12 +57,43 @@ SDK 仍拥有 loop、Session、history、compaction 与重试。Worker 只拥有
 ## 共享包：真正跨边界的基础设施与原生接入
 
 - `packages/database`：连接、Pool 关闭、SQL 结构、迁移与生成的 `schema.sql`。JSON 列只声明数据库结构，由 owner 解码；不依赖产品 protocol。
-- `packages/protocol/http`：公开 Thread / Turn、输入与结果 DTO。
+- `packages/protocol/http`：公开 Thread / Turn、输入与结果 DTO；`src/activity.ts` 承接公开活动校验，不装入私有 SDK 载荷。
 - `packages/protocol/execution`：私有 Pi binding、队列名与引用型通知；根 export 只公开 HTTP 合同。
-- `packages/harness`：Pi / OpenAI / Claude 原生 adapters，生产和 `evals` 直接消费；不建立第四执行框架。
+- `packages/harness`：Pi / OpenAI / Claude 原生 adapters，生产和 `evals` 直接消费；各 adapter 邻近 `projection.ts` 与测试，`activity-channel.ts` 承接有限观察缓冲，不建立第四执行框架。
 - `packages/sandbox`：后续隔离合同；当前产品路径没有 E2B 实现。
 
 不存在 `packages/conversations` 兼容包或旧路径转发 barrel。正常动作优先放在可直接阅读的 ES module，不为目录对称性生成 micro-helper、manager、registry 或状态机引擎。
+
+## Web：特性邻近，布局持续存在
+
+以下是当前文件树，不是拟建的分层模板；每个模块的能力不等于已完成浏览器或生产验收。
+
+```text
+apps/web/src/
+  main.tsx                      # React、Query 与 Router 装配
+  app.tsx                       # Workspace 根路由；status 懒加载
+  styles.css                    # Tailwind import、theme 与全局 base
+  conversation/
+    workspace.tsx               # 持续挂载的会话布局与辅助路由
+    conversation-view.tsx       # 当前 Thread、快照与交互编排
+    conversation.ts             # owner-scoped Query、公开 HTTP 调用
+    activity.ts                 # 临时活动 reducer；不决定 Turn 终态
+    use-turn-events.ts           # 当前 Turn 的 SSE 观察与清理
+    turn-view.tsx                # 正式结果、过程状态、可折叠工具活动
+    answer-markdown.tsx          # 按实际回答懒加载的安全 Markdown renderer
+    markdown.css                # Markdown 后代结构样式
+    composer.tsx                # 输入与发送／停止交互
+    sidebar.tsx                 # Thread 导航
+  identity/
+    session.ts                  # 原生认证 session 查询
+    authentication.tsx          # 按需加载的认证界面
+  status/
+    runtime-status.tsx          # 辅助状态页面，不替代会话工作区
+```
+
+会话布局不因打开认证或状态界面而被替换；懒加载属于辅助能力，而不是卸载正在观察的会话。持久快照由 Query 按 owner/Thread 定位，活动由会话局部 reducer 暂存；账户或 Thread 变化需清理观察。布局 utility 留在 JSX，共享设计 token 留在 `styles.css`，Markdown 的结构 CSS 邻近消费者。不要再建立全局 messages store、通用 socket provider 或 CSS 转发层。
+
+`web-search.ts` 的存在只说明可选工具接入：部署需显式启用对应策略与私有 provider key，不能由源码文件存在推断已进行真实外网检索。审批、独立 Artifact 和不安全 shell 不因研究矩阵出现而成为已实现能力；证据边界见[研究报告](agent-product-research.md)。
 
 ## 测试
 

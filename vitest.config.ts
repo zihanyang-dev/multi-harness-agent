@@ -20,6 +20,7 @@ export default defineConfig({
       'packages/**/src/**/*.test.ts',
       'packages/**/tests/**/*.test.ts',
       'tests/architecture.test.ts',
+      'tests/e2e-config.test.ts',
     ],
   },
 });

@@ -37,3 +37,19 @@ it('requires a complete trusted profile and never fills missing authentication c
   ).toThrow();
   expect(() => config.readServerConfig({ ...environment, PORT: 'not-a-port' })).toThrow();
 });
+
+it('selects the explicit search policy without reading any search credential', () => {
+  const environment = {
+    AGENT_BACKEND_ENABLED: '1',
+    DATABASE_URL: 'postgresql://localhost/agent',
+    REDIS_URL: 'redis://localhost:6379',
+    BETTER_AUTH_URL: 'http://localhost:3000',
+    BETTER_AUTH_SECRET: 'local-test-only-secret-with-32-characters',
+    PI_PROVIDER: 'openai',
+    PI_MODEL: 'configured-model',
+    PI_STORAGE_ID: 'private-volume',
+    PI_POLICY: 'web-search-v1',
+  };
+  expect(config.readServerConfig(environment).backend?.binding.policy).toBe('web-search-v1');
+  expect(() => config.readServerConfig({ ...environment, PI_POLICY: 'unknown' })).toThrow();
+});

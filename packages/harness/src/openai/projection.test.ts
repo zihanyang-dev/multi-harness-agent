@@ -1,4 +1,11 @@
-import { RunRawModelStreamEvent, type RunStreamEvent } from '@openai/agents';
+import {
+  Agent,
+  RunItemStreamEvent,
+  RunRawModelStreamEvent,
+  type RunStreamEvent,
+  RunToolCallItem,
+  RunToolCallOutputItem,
+} from '@openai/agents';
 import { expect, it } from 'vitest';
 
 import type { HarnessTurnResult } from '../contract.js';
@@ -94,4 +101,73 @@ it('keeps an observation failure separate from successful execution', async () =
 
   expect(events.at(-1)).toEqual({ type: 'RUN_ERROR', message: 'OpenAI event observation failed' });
   await expect(result).resolves.toEqual({ status: 'completed', messages: [] });
+});
+
+it('publishes reasoning PROCESS only, never raw reasoning or summary text', async () => {
+  const events = [];
+  for await (const event of createRunEvents(
+    source([
+      new RunRawModelStreamEvent({
+        type: 'model',
+        event: { type: 'response.reasoning_text.delta', delta: 'private' },
+      }),
+      new RunRawModelStreamEvent({
+        type: 'model',
+        event: { type: 'response.reasoning_summary_text.delta', delta: 'also private' },
+      }),
+      new RunRawModelStreamEvent({
+        type: 'model',
+        event: { type: 'response.reasoning_summary_text.done', text: 'private summary' },
+      }),
+    ]),
+    { ...identity, result: Promise.resolve({ status: 'completed', messages: [] }) },
+  ))
+    events.push(event);
+  expect(events.slice(1, -1)).toEqual([
+    { type: 'CUSTOM', name: 'reasoning', value: { status: 'started' } },
+    { type: 'CUSTOM', name: 'reasoning', value: { status: 'finished' } },
+  ]);
+  expect(JSON.stringify(events)).not.toContain('private');
+});
+
+it('projects completed function-call generation and native execution results without arguments or output', async () => {
+  const agent = new Agent({ name: 'fixture' });
+  const call = new RunToolCallItem(
+    { type: 'function_call', callId: 'tool', name: 'search', arguments: 'private args' },
+    agent,
+  );
+  const output = new RunToolCallOutputItem(
+    {
+      type: 'function_call_result',
+      callId: 'tool',
+      name: 'search',
+      status: 'completed',
+      output: { type: 'text', text: 'private output' },
+    },
+    agent,
+    'private output',
+    undefined,
+    'executed',
+  );
+  const events = [];
+  for await (const event of createRunEvents(
+    source([
+      new RunItemStreamEvent('tool_called', call),
+      new RunItemStreamEvent('tool_output', output),
+    ]),
+    { ...identity, result: Promise.resolve({ status: 'completed', messages: [] }) },
+  ))
+    events.push(event);
+  expect(events.slice(1, -1)).toEqual([
+    { type: 'TOOL_CALL_START', toolCallId: 'tool', toolCallName: 'search' },
+    { type: 'TOOL_CALL_END', toolCallId: 'tool' },
+    {
+      type: 'TOOL_CALL_RESULT',
+      messageId: expect.any(String),
+      toolCallId: 'tool',
+      content: 'Tool finished.',
+      role: 'tool',
+    },
+  ]);
+  expect(JSON.stringify(events)).not.toContain('private');
 });

@@ -40,7 +40,7 @@
 | 语言与运行时 | TypeScript 严格模式；Node.js 24 LTS | SDK 与基础设施兼容面广，避免让生产依赖特殊运行时行为 |
 | 仓库与包管理 | pnpm workspace | 应用与可复用包直接组织；不先建设额外构建平台 |
 | Web | React + Vite + TanStack Router / Query | 独立后端的交互应用，无已确认 SSR 需求；路由与服务器状态不用自己重写 |
-| UI | shadcn/ui；按需复用 assistant-ui 的对话组件与 ExternalStoreRuntime | 复用可访问性与对话交互；任务事实与控制仍由我们的产品 API 持有 |
+| UI | React + Tailwind CSS；原生 dialog / inert、react-markdown / GFM | 首版忠实实现原型与真实文本任务；基础组件按实际需要复用，不先加入额外 Thread runtime |
 | HTTP 服务 | Hono + @hono/node-server | 以 Web 标准表达产品路由和中间件；当前没有必须采用 Fastify 封装体系的需求 |
 | 公共 schema | Zod + @hono/zod-validator | 维护一份边界定义，连接运行时校验与 TypeScript；不复制 SDK 内部类型 |
 | 实时传输 | HTTP 命令 + SSE；使用 Hono streamSSE | 文本和活动以服务端推送为主；复用 SSE 编码，连接清理不取消后台任务 |
@@ -56,6 +56,8 @@
 | 可观测性 | OpenTelemetry + Pino；托管 Grafana Cloud | 标准化 trace、指标和结构化日志；不自研追踪存储与控制台 |
 | 测试与评测 | Vitest、Playwright、真实基础设施集成测试 | 契约、交互、重复投递与故障行为分别验证；评测复用实际 adapters |
 | 初始生产部署 | Docker；AWS ECS Fargate、RDS、S3、托管 Redis；E2B 独立托管 | 不先自建 Kubernetes、数据库、工作流服务或虚拟机平台 |
+
+2026-10-11 首版已实现 React / Tailwind 文本会话、原生认证与持久侧栏，现已通过 Worker → Redis Streams → owner-scoped Server SSE → native EventSource 观察增量；5 秒 HTTP 查询只作 SSE 不可用／对账备援。Pi 可选 web-search-v1 已装配受限只读搜索，其他业务工具仍属后续基线。未引入 shadcn/ui 或 assistant-ui，也不伪造其 runtime 已接入。实现与真实模型证据见 [会话 UI 与 E2E](conversation-ui.md)。
 
 HTTP adapter、UI adapter 和协议版本需纳入依赖验收；“官方”与“有版本号”不代替兼容测试。锁定具体版本和镜像 digest，及时接收安全修复。Node 24 当时为 LTS；不为使用最新版改用尚处 Current 的 Node 26。
 
@@ -97,9 +99,9 @@ Web
 
 BullMQ 与活动 Streams 可以使用同一托管 Redis，但保留、内存与写入压力要主动管理；活动积压不能耗尽队列容量。队列要求的持久化、复制和 noeviction 策略按生产配置验收。
 
-Redis Streams 不决定执行状态：它保存有界实时回放，不成为任务终态、审批或恢复的权威。多个独立读者广播与同组消费者分摊不同，SSE server 使用受控订阅与本地 fan-out，不默认每个浏览器占一条 Redis 阻塞连接。
+Redis Streams 不决定执行状态：它保存有界实时回放，不成为任务终态、审批或恢复的权威。多个独立读者广播与同组消费者分摊不同，当前 SSE 每连接以非阻塞 Lua 原子读取 metadata 与 `XREAD COUNT 100`，不占独立 Redis 阻塞连接，也未建立本地 fan-out 层。
 
-正式消息、关键行动事实和成果有持久查询路径。Stream 已裁剪或故障时，客户端恢复快照并标明实时缺口，不拼造丢失的 delta。需要长期保留的轨迹进入受授权存储，不无限占用 Redis。
+正式消息有 PostgreSQL 持久查询路径；关键行动事实长期留存与独立成果交付仍是建设目标。Stream 使用 `MAXLEN ~ 2048` 与滑动 24 小时 TTL；已裁剪（含新 0 cursor）或故障时，客户端恢复 SQL 快照并标明实时缺口，不拼造丢失的 delta。需要长期保留的轨迹进入受授权存储，不无限占用 Redis。
 
 初始不将 WebSocket 用作所有事件的通用底座。若确认实时终端、双向音频或浏览器接管需求，再采用相应双向协议，不能把它们塞进 SSE。
 
@@ -179,7 +181,7 @@ Harness 和 Sandbox 提前设计公共契约。管理环境的能力与当前环
 
 UI 的 runtime 仅指前端状态适配，不是 Agent harness。assistant-ui 不持有产品任务权威；不采用实验性 thread-list 机制作为默认历史管理。切换 thread、关闭页面和组件卸载只解除观察，不能自动取消后台任务；显式用户控制才发送停止命令。
 
-AG-UI 的事件不等于让浏览器提交的 messages 数组成为权威历史。Server 根据可信身份和持久记录决定输入，公开推理只呈现供应商允许的内容。
+AG-UI 的事件不等于让浏览器提交的 messages 数组成为权威历史。Server 根据可信身份和持久记录决定输入，当前公开推理只呈现过程状态，禁止 raw thought、工具参数、private graph 与 signatures；安全快照支持撤回临时回答。
 
 ## 10. 哪些机制交给成熟组件，哪些仍然自己负责
 

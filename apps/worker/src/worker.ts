@@ -26,7 +26,7 @@ export interface WorkerOptions {
   logger: Logger;
 }
 
-/** Borrows its dependencies; closing stops intake and joins every owned execution. */
+/** Borrows execution dependencies and owns a bounded activity connection, joined on close. */
 export function startWorker(options: WorkerOptions): Worker {
   const { database, prefix, connection, host, maxRunMs, logger } = options;
   const shutdown = new AbortController();
@@ -38,7 +38,12 @@ export function startWorker(options: WorkerOptions): Worker {
         nativeSignal === undefined
           ? shutdown.signal
           : AbortSignal.any([shutdown.signal, nativeSignal]);
-      await processTurnJob(database, job, { host, maxRunMs, signal });
+      await processTurnJob(database, job, {
+        host,
+        maxRunMs,
+        signal,
+        activity: { connection: activityConnection, prefix },
+      });
     },
     { connection, prefix, autorun: false, concurrency: 1 },
   );
@@ -47,7 +52,17 @@ export function startWorker(options: WorkerOptions): Worker {
     for (const jobId of jobIds) worker.cancelJob(jobId, 'turn_lock_renewal_failed');
   });
 
-  const finished = worker.run();
+  // BullMQ requires indefinite retries for its consumer, not for observational XADD.
+  const activityConnection = connection.duplicate({
+    lazyConnect: false,
+    maxRetriesPerRequest: 1,
+    enableOfflineQueue: false,
+    commandTimeout: 1000,
+  });
+  activityConnection.on('error', () =>
+    logger.warn({ code: 'activity_unavailable' }, 'Live activity transport unavailable'),
+  );
+  const finished = worker.run().finally(() => activityConnection.disconnect());
   let closing: Promise<void> | undefined;
   return {
     finished,
@@ -62,7 +77,12 @@ export function startWorker(options: WorkerOptions): Worker {
 async function processTurnJob(
   database: Database,
   job: Job<ExecuteTurnJob>,
-  options: { host: PiTurnHost; maxRunMs: number; signal: AbortSignal },
+  options: {
+    host: PiTurnHost;
+    maxRunMs: number;
+    signal: AbortSignal;
+    activity: { connection: Redis; prefix: string };
+  },
 ): Promise<void> {
   const parsed = ExecuteTurnJobSchema.safeParse(job.data);
   const identity = job.id?.match(

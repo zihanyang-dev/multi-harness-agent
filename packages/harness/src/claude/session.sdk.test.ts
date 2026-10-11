@@ -433,6 +433,82 @@ it('retains a native deferred receipt rather than inventing a portable continuat
   await session.dispose();
 });
 
+it('delivers attributed native partial text before result without borrowing a second reader', async () => {
+  const { session, child } = await openFixture();
+  const run = await session.run({ content: [] });
+  const sent = await child.nextUser();
+  const events = run.events[Symbol.asyncIterator]();
+  expect((await events.next()).value).toMatchObject({ type: 'RUN_STARTED' });
+  const send = (event: unknown, user_message_uuid?: string) =>
+    child.send({
+      type: 'stream_event',
+      session_id: child.id,
+      parent_tool_use_id: null,
+      uuid: randomUUID(),
+      event,
+      user_message_uuid,
+    } as SDKMessage);
+  send({ type: 'message_start', message: { id: 'native' } }, 'foreign');
+  send({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'foreign' } });
+  send({ type: 'message_start', message: { id: 'native' } }, sent.uuid);
+  send({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'pending' } });
+  expect((await events.next()).value).toMatchObject({ type: 'TEXT_MESSAGE_START' });
+  expect((await events.next()).value).toMatchObject({
+    type: 'TEXT_MESSAGE_CONTENT',
+    delta: 'pending',
+  });
+  let settled = false;
+  void run.result.then(() => {
+    settled = true;
+  });
+  await Promise.resolve();
+  expect(settled).toBe(false);
+  await events.return?.();
+  child.send(assistant(child.id, randomUUID(), 'authoritative'));
+  child.send(result(child.id, sent.uuid));
+  expect((await run.result).messages[0]?.content).toBe('authoritative');
+  expect(child.exitCode).toBeNull();
+  await session.dispose();
+});
+
+it('unconsumed bounded projection overflow does not stop the native Query or replace its receipt', async () => {
+  const { session, child } = await openFixture();
+  const run = await session.run({ content: [] });
+  const sent = await child.nextUser();
+  child.send({
+    type: 'stream_event',
+    session_id: child.id,
+    parent_tool_use_id: null,
+    uuid: randomUUID(),
+    user_message_uuid: sent.uuid,
+    event: { type: 'message_start', message: { id: 'native' } },
+  } as unknown as SDKMessage);
+  for (let i = 0; i < 300; i++)
+    child.send({
+      type: 'stream_event',
+      session_id: child.id,
+      parent_tool_use_id: null,
+      uuid: randomUUID(),
+      event: { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'x' } },
+    } as SDKMessage);
+  child.send(assistant(child.id, randomUUID(), 'authoritative'));
+  const receipt = result(child.id, sent.uuid);
+  child.send(receipt);
+  expect(await run.result).toMatchObject({
+    status: 'completed',
+    native: receipt,
+    messages: [{ content: 'authoritative' }],
+  });
+  const projected = [];
+  for await (const event of run.events) projected.push(event);
+  expect(projected.at(-1)).toEqual({
+    type: 'RUN_ERROR',
+    message: 'Claude event observation failed',
+  });
+  expect(child.exitCode).toBeNull();
+  await session.dispose();
+});
+
 async function openFixture(
   dispose?: () => void | Promise<void>,
   configure?: (native: Query) => void,
@@ -452,6 +528,7 @@ async function openFixture(
           settingSources: [],
           strictMcpConfig: true,
           tools: [],
+          includePartialMessages: true,
           env: { HOME: process.env.HOME, PATH: process.env.PATH },
           spawnClaudeCodeProcess: () => child,
         },

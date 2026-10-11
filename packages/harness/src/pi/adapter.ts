@@ -19,6 +19,8 @@ export type PiHarnessPromptOptions = Omit<PromptOptions, 'images'>;
 export interface PiSessionConfig {
   session: AgentSession;
   promptOptions?: PiHarnessPromptOptions;
+  /** Explicit opt-in for reviewed read-only text previews (8,192 characters); private results stay hidden. */
+  publicTools?: readonly string[];
   /** Releases explicitly transferred resources through their native lifecycle. */
   dispose?: () => void | Promise<void>;
 }

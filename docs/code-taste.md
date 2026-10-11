@@ -253,7 +253,7 @@ const eventId = `${fact.id}:${frame.type}:${messageId}`;
 
 简单的一个 conditional spread 可以接受；多层条件、解析和转换混在属性中时，先给计算结果命名，再组装。
 
-保持字段缺失与显式 `undefined` 的语义，不为了好看互换。公共输出用明确白名单，不 spread 整个私有 SDK 对象；美化不能扩大数据暴露。
+保持字段缺失与显式 `undefined` 的语义，不为了好看互换。公共输出用明确白名单，不 spread 整个私有 SDK 对象；美化不能扩大数据暴露。SDK streaming projector 只认官方有支持的事件：工具被提议不等于已执行，推理片段不等于公开摘要。临时 message identity 与正式 entry identity 可以不同，不靠拼接它们制造 checkpoint。
 
 ### 使用嵌入语言自己的布局
 
@@ -472,6 +472,7 @@ src/
 - 私有 helper 先留在真实 owner 的文件，具有独立责任或稳定非平凡复用时才移出。
 - 不把所有类型、SQL、服务和工具函数都强制集中到全局目录；领域内确有一组稳定查询责任时可以设 `db/` 或 `queries.ts`。
 - 不默认建立 `utils.ts`、`helpers.ts`、`common/`、`shared/` 杂物箱。
+- 前端按会话、身份、状态等实际特性邻近组织；Query 持久快照与临时活动 reducer 不平行拥有正式消息。全局 CSS 只承接 Tailwind theme/base，布局与状态 utility 留在 JSX；Markdown 后代结构样式可以放在会话邻近 CSS，不为“全 utility”逐节点造组件。
 - 包的稳定公共入口可以有 `index.ts`；不为每个目录建立转发 barrel，不 re-export 全部内部符号。
 
 拆文件应减少主题混杂、独立变化冲突或导航成本。不能只因为超过某个行数，也不能拆完只少一屏代码、多三次跳转。
@@ -505,6 +506,7 @@ src/
 - 业务拒绝、缺失、取消和未知结果有明确含义，不全部折叠成 `false` 或空字符串。
 - 有消费者需要识别或携带上下文时才建立具体错误类，不为每条错误信息建文件。
 - 创建资源的代码说明谁等待、停止和释放；监听器、定时器和异步任务也有归属。
+- 同步 SDK subscribe 回调不 await、不向 SDK 抛公开投影错误；观察写入有界且由 host 收尾。单 reader 的 native Query 不再开第二个消费者，interrupt ACK 与 result 分开。
 - fire-and-forget 必须是允许丢失、有人观察失败的工作，不能只是少写一个 await。
 - Promise 链不掩盖实际执行顺序，清理失败不静默覆盖主错误。
 - 注释与诊断不默认包含凭证、完整输入或外部响应正文。
@@ -528,7 +530,7 @@ src/
 
 ## 参考与阅读范围
 
-调研口径：2026-10-09。原则综合官方资料与本地源码阅读，不是采用最新版本或某种范式的宣言。读取了示例项目的代码规范、目录文档、milestone 审查，以及历史 Handover 审查中有关代码形状的选段；未将历史拟议修改当作当前实现或已验证结果。
+调研口径：2026-10-12。新增[五项目源码与 SDK 重读](agent-product-research.md)，只补充当前观察、前端归属和生命周期边界，不以社区项目的复杂度为模板。原则综合官方资料与本地源码阅读，不是采用最新版本或某种范式的宣言。读取了示例项目的代码规范、目录文档、milestone 审查，以及历史 Handover 审查中有关代码形状的选段；未将历史拟议修改当作当前实现或已验证结果。
 
 [1]: https://www.typescriptlang.org/docs/handbook/typescript-in-5-minutes-oop.html "TypeScript：Rethinking the Class、Free Functions and Data"
 [2]: https://google.github.io/styleguide/tsguide.html "Google TypeScript Style Guide"

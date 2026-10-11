@@ -2,7 +2,9 @@ import { setTimeout as delay } from 'node:timers/promises';
 import type { Database } from '@multi-harness/database';
 import type { HarnessRun, HarnessSession, HarnessTurnResult } from '@multi-harness/harness';
 import type { TurnResult } from '@multi-harness/protocol/http';
+import type { Redis } from 'ioredis';
 import type { PiTurnHost } from '../contract.js';
+import { publishRunActivity } from './activity-publication.js';
 import {
   type ClaimedTurn,
   claimTurn,
@@ -21,7 +23,13 @@ type TurnExecution =
 /** Claims once, joins native execution and cleanup, then publishes a fenced formal result. */
 export async function executeTurn(
   database: Database,
-  options: { turnId: string; host: PiTurnHost; signal: AbortSignal; maxRunMs: number },
+  options: {
+    turnId: string;
+    host: PiTurnHost;
+    signal: AbortSignal;
+    maxRunMs: number;
+    activity?: { connection: Redis; prefix: string };
+  },
 ): Promise<void> {
   const { turnId, host, signal, maxRunMs } = options;
   if (!Number.isSafeInteger(maxRunMs) || maxRunMs <= 0 || maxRunMs > 2_147_483_647)
@@ -45,7 +53,11 @@ export async function executeTurn(
       threadId: claim.threadId,
       ...(claim.nativeSessionId === null ? {} : { nativeSessionId: claim.nativeSessionId }),
     });
-    execution = await invokeTurn(database, claim, session, { shutdown: signal, deadline });
+    execution = await invokeTurn(database, claim, session, {
+      shutdown: signal,
+      deadline,
+      ...(options.activity === undefined ? {} : { activity: options.activity }),
+    });
   } catch {
     execution = { kind: 'uncertain', code: 'execution_unknown' };
   }
@@ -83,7 +95,11 @@ async function invokeTurn(
   database: Database,
   claim: ClaimedTurn,
   session: HarnessSession,
-  options: { shutdown: AbortSignal; deadline: number },
+  options: {
+    shutdown: AbortSignal;
+    deadline: number;
+    activity?: { connection: Redis; prefix: string };
+  },
 ): Promise<TurnExecution> {
   const { shutdown, deadline } = options;
   const identity = { turnId: claim.turnId, attemptId: claim.attemptId };
@@ -104,6 +120,9 @@ async function invokeTurn(
   const [receipt, control] = await Promise.allSettled([
     run.result.finally(() => stop.abort()),
     monitorControl(database, identity, run, { shutdown, stop: stop.signal, deadline }),
+    options.activity === undefined
+      ? undefined
+      : publishRunActivity(run, { turnId: claim.turnId, ...options.activity, signal: shutdown }),
   ]);
   if (receipt.status === 'fulfilled') {
     const result = receipt.value;

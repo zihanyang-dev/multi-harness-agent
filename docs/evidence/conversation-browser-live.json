@@ -1,0 +1,34 @@
+{
+  "runtime": "v24.21.0",
+  "provider": "openai",
+  "model": "gpt-5.5",
+  "scope": "Real browser UI, native Better Auth, built Server and Worker/host factories; private explicit CLI endpoint binding; real inference",
+  "stage": "passed",
+  "results": [
+    {
+      "name": "browser authenticates using the native email/password UI",
+      "status": "passed",
+      "durationMs": 1321
+    },
+    {
+      "name": "browser submits through SQL outbox and native Pi to a real model and renders the formal result",
+      "status": "passed",
+      "durationMs": 6061
+    },
+    {
+      "name": "UI reload plus fresh Worker process resumes the exact native history for a real follow-up",
+      "status": "passed",
+      "durationMs": 5864
+    },
+    {
+      "name": "browser requests cooperative cancellation and waits for native joined settlement",
+      "status": "passed",
+      "durationMs": 4810
+    },
+    {
+      "name": "browser sign-out clears private conversation presentation and mobile home remains usable",
+      "status": "passed",
+      "durationMs": 1464
+    }
+  ]
+}

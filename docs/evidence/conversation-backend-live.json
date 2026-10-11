@@ -1,0 +1,49 @@
+{
+  "runtime": "v24.21.0",
+  "provider": "openai",
+  "model": "gpt-5.5",
+  "scope": "built Server HTTP and built Worker/host factories; explicit CLI endpoint binding; real inference",
+  "stage": "passed",
+  "results": [
+    {
+      "name": "native authentication, unauthorized admission and strict mutation Origin",
+      "status": "passed",
+      "durationMs": 130
+    },
+    {
+      "name": "durable immutable acceptance, replay and busy/conflict before model allocation",
+      "status": "passed",
+      "durationMs": 20
+    },
+    {
+      "name": "HTTP to PostgreSQL outbox to BullMQ to built Pi host to real model to formal result",
+      "status": "passed",
+      "durationMs": 5904
+    },
+    {
+      "name": "fresh Worker process restores exact native history without replaying product messages",
+      "status": "passed",
+      "durationMs": 8515
+    },
+    {
+      "name": "running cancellation records intent and joins native stop before settlement",
+      "status": "passed",
+      "durationMs": 2864
+    },
+    {
+      "name": "same Thread continues with a real model after joined cancellation",
+      "status": "passed",
+      "durationMs": 3783
+    },
+    {
+      "name": "missing native history remains fail-closed and blocks admission rather than restarting",
+      "status": "passed",
+      "durationMs": 1059
+    },
+    {
+      "name": "native logout revokes cookie access to persisted conversations",
+      "status": "passed",
+      "durationMs": 7
+    }
+  ]
+}

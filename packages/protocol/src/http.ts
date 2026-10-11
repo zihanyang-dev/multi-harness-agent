@@ -24,11 +24,22 @@ export const SubmitTurnSchema = z.strictObject({
   input: TurnInputSchema,
 });
 
+/** Authorized identity and stored tool policy; absent legacy capabilities are not inferred. */
 export const ThreadSchema = z.strictObject({
   id: z.uuid(),
   harness: z.literal('pi'),
+  tools: z.array(z.literal('web_search')).max(1).optional(),
   createdAt: z.iso.datetime(),
 });
+
+/** Plain display preview; not a mutable conversation name. */
+export const ThreadSummarySchema = ThreadSchema.extend({ title: z.string().min(1).max(120) });
+export const ThreadListSchema = z.strictObject({
+  threads: z.array(ThreadSummarySchema),
+  nextCursor: z.uuid().nullable(),
+});
+export type ThreadSummary = z.infer<typeof ThreadSummarySchema>;
+export type ThreadList = z.infer<typeof ThreadListSchema>;
 
 export const TurnResultSchema = z.strictObject({ messages: z.array(MessageSchema) });
 export type TurnResult = z.infer<typeof TurnResultSchema>;
@@ -84,4 +95,10 @@ export type SubmitTurn = z.infer<typeof SubmitTurnSchema>;
 export type Thread = z.infer<typeof ThreadSchema>;
 export type Turn = z.infer<typeof TurnSchema>;
 
+export {
+  type ActivityEnvelope,
+  ActivityEnvelopeSchema,
+  type StrictActivityEvent,
+  StrictActivityEventSchema,
+} from './activity.js';
 export { type HealthResponse, HealthResponseSchema } from './health.js';

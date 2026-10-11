@@ -1,14 +1,23 @@
 import { randomUUID, type UUID } from 'node:crypto';
-
+import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
+import { type ActivityChannel, createActivityChannel } from '../activity-channel.js';
 import type { HarnessTurnInput } from '../contract.js';
 import type { ClaudeRun, ClaudeSession, ClaudeSessionConfig, ClaudeTurnResult } from './adapter.js';
-import { createRunEvents, observeMessage, type RunObservation, toRunStatus } from './projection.js';
+import {
+  createActivityProjector,
+  createRunEvents,
+  observeMessage,
+  type RunObservation,
+  toRunStatus,
+} from './projection.js';
 import { type InputStream, toNativeInput } from './request.js';
 
 interface Execution {
   promptId: UUID;
   result: PromiseWithResolvers<ClaudeTurnResult>;
   observation: RunObservation;
+  activity: ActivityChannel;
+  project: (message: SDKMessage) => void;
   stopping: Promise<void> | undefined;
 }
 
@@ -49,10 +58,15 @@ async function runSession(state: SessionState, input: HarnessTurnInput): Promise
   if (state.active !== undefined) throw new Error('Claude session already has an active run');
 
   const text = toNativeInput(input);
+  const promptId = randomUUID();
+  const activity = createActivityChannel();
+  const observation: RunObservation = { messages: new Map(), aborted: false };
   const execution: Execution = {
-    promptId: randomUUID(),
+    promptId,
+    activity,
+    project: createActivityProjector(activity, promptId, observation),
     result: Promise.withResolvers<ClaudeTurnResult>(),
-    observation: { messages: new Map(), aborted: false },
+    observation,
     stopping: undefined,
   };
   // Reserve before handing input to the native producer; consumers never drive execution.
@@ -76,6 +90,7 @@ async function runSession(state: SessionState, input: HarnessTurnInput): Promise
       threadId: state.config.nativeSessionId,
       runId: execution.promptId,
       result: execution.result.promise,
+      activity,
     }),
     result: execution.result.promise,
     interrupt: () => interruptExecution(state, execution),
@@ -92,6 +107,7 @@ async function readSession(state: SessionState): Promise<void> {
       const execution = state.active;
       if (execution === undefined) continue;
       const native = observeMessage(message, execution.observation, execution.promptId);
+      execution.project(message);
       if (native === undefined) continue;
 
       // Fence an already-issued session-scoped interrupt, even if its ACK follows the result.
@@ -109,12 +125,14 @@ async function readSession(state: SessionState): Promise<void> {
         // An attributable turn error is recoverable on the same live Query, unlike reader failure.
         execution.result.reject(error);
       }
+      execution.activity.close();
       state.active = undefined;
     }
     throw new Error('Claude native query closed without an active turn result');
   } catch (error) {
     state.failed = true;
     state.active?.result.reject(error);
+    state.active?.activity.close();
     state.active = undefined;
     state.input.close();
     // Native iterator cleanup has already joined its bounded SDK teardown here.

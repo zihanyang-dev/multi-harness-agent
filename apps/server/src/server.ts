@@ -79,6 +79,7 @@ export async function startServer(config: ServerConfig, logger: Logger): Promise
       });
       app = createApp({
         database,
+        activity: { connection, prefix: backend.prefix, shutdown: shutdown.signal },
         binding: backend.binding,
         trustedOrigin: new URL(backend.baseURL).origin,
         handleAuth: (request) => auth.handler(request),

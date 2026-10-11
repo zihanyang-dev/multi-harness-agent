@@ -1,0 +1,319 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-11T17:33:36.148167+00:00",
+  "status": "passed",
+  "scope": "Owned isolated fixture account only; current built native server/worker/harness and current Vite frontend. No product source edits.",
+  "runtime": {
+    "node": "24.21.0",
+    "pnpm": "12.8.1",
+    "piCodingAgent": "1.1.0",
+    "piAI": "1.1.0",
+    "model": "openai/gpt-5.5",
+    "api": "openai-responses",
+    "policy": "text-v1",
+    "maxRunMs": 90000,
+    "actualModelTurns": 5,
+    "fauxProvider": false,
+    "browser": "playwright-cli named session mha-streaming-live",
+    "components": [
+      "createPiTurnHost",
+      "startServer",
+      "startWorker",
+      "native Better Auth",
+      "isolated PostgreSQL 18",
+      "BullMQ",
+      "isolated Redis Streams",
+      "native browser EventSource",
+      "current Vite and lazy Markdown"
+    ]
+  },
+  "credentialBoundary": {
+    "authorized": true,
+    "resolution": "Official CLI extension command using ctx.model and ctx.modelRegistry.getApiKeyAndHeaders; plain DTO over child stdin; in-memory private ModelRuntime credentials; same resolved endpoint. CLI ordinary authentication/configuration is read internally by the official CLI, not manually inspected.",
+    "manualAuthConfigEnvReads": false,
+    "keyInArgvEnvStdoutFilesOrEvidence": false,
+    "nativeGraphSerialization": false,
+    "workerModelsPath": null,
+    "catalogNetworkRefresh": false,
+    "cacheWarming": "off",
+    "privateEndpointAndHeadersOmitted": true
+  },
+  "verification": {
+    "passingScenarioGroups": 7,
+    "actualModelTurns": 5,
+    "completed": 4,
+    "cancelled": 1,
+    "first": {
+      "case": "native-auth-submit-incremental-receipt-copy",
+      "passed": true,
+      "samples": [212, 221],
+      "sqlDuringSamples": {
+        "status": "running",
+        "resultNull": true
+      },
+      "receipt": {
+        "status": "completed",
+        "messages": 1,
+        "characters": 2334
+      },
+      "copyExact": true,
+      "wire": {
+        "activity": 443,
+        "types": {
+          "CUSTOM": 2,
+          "TEXT_MESSAGE_START": 1,
+          "TEXT_MESSAGE_CONTENT": 439,
+          "TEXT_MESSAGE_END": 1
+        },
+        "privateFields": false
+      },
+      "metrics": {
+        "viewport": {
+          "width": 1440,
+          "height": 1000
+        },
+        "main": {
+          "x": 240,
+          "y": 6,
+          "width": 1194,
+          "height": 988
+        },
+        "composer": {
+          "x": 453,
+          "y": 420,
+          "width": 768,
+          "height": 186
+        },
+        "overflow": false
+      }
+    },
+    "remaining": [
+      {
+        "case": "fresh-worker-native-history",
+        "passed": true,
+        "receipt": {
+          "status": "completed",
+          "characters": 213
+        },
+        "sameNativeSession": true
+      },
+      {
+        "case": "cancel-after-live-chunk",
+        "passed": true,
+        "receiptStatus": "cancelled",
+        "sqlAtCancel": {
+          "status": "running",
+          "resultNull": true
+        },
+        "nativeJoined": true
+      },
+      {
+        "case": "later-turn-after-cancel",
+        "passed": true,
+        "receipt": {
+          "status": "completed",
+          "characters": 93
+        }
+      },
+      {
+        "case": "new-chat-isolated-mobile",
+        "passed": true,
+        "receipt": {
+          "status": "completed",
+          "characters": 167
+        },
+        "mobileMetrics": {
+          "viewport": {
+            "width": 390,
+            "height": 844
+          },
+          "main": {
+            "x": 6,
+            "y": 6,
+            "width": 378,
+            "height": 832
+          },
+          "composer": {
+            "x": 19,
+            "y": 703,
+            "width": 352,
+            "height": 114
+          },
+          "overflow": false
+        }
+      },
+      {
+        "case": "logout-clears-cache-and-anonymous-history",
+        "passed": true,
+        "authStatus": 401
+      }
+    ],
+    "settledMobileRecheck": {
+      "case": "settled-mobile-layout-and-native-sign-in",
+      "passed": true,
+      "metrics": {
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "main": {
+          "x": 6,
+          "y": 6,
+          "width": 378,
+          "height": 832
+        },
+        "composer": {
+          "x": 19,
+          "y": 703,
+          "width": 352,
+          "height": 114
+        },
+        "overflow": false
+      },
+      "drawerEscape": true
+    },
+    "browserWireAfterReload": {
+      "activity": 129,
+      "types": {
+        "TEXT_MESSAGE_START": 3,
+        "TEXT_MESSAGE_CONTENT": 120,
+        "TEXT_MESSAGE_END": 2,
+        "CUSTOM": 4
+      },
+      "privateFields": false
+    },
+    "joinedSQLObservation": {
+      "turns": [
+        {
+          "status": "completed",
+          "result_null": false,
+          "finished": true
+        },
+        {
+          "status": "completed",
+          "result_null": false,
+          "finished": true
+        },
+        {
+          "status": "cancelled",
+          "result_null": false,
+          "finished": true
+        },
+        {
+          "status": "completed",
+          "result_null": false,
+          "finished": true
+        },
+        {
+          "status": "completed",
+          "result_null": false,
+          "finished": true
+        }
+      ],
+      "attempts": [
+        {
+          "stopped": true
+        },
+        {
+          "stopped": true
+        },
+        {
+          "stopped": true
+        },
+        {
+          "stopped": true
+        },
+        {
+          "stopped": true
+        }
+      ],
+      "opens": 5,
+      "joins": 5,
+      "restarts": 1,
+      "sameNativeSession": false
+    },
+    "nativeAndStreamVerification": {
+      "passed": true,
+      "actualModelTurns": 5,
+      "completedTurns": 4,
+      "cancelledTurns": 1,
+      "exactNativeReceiptMessages": 4,
+      "strictPublicEnvelopes": 610,
+      "textDeltas": 594,
+      "reasoningStatusMarkers": 6,
+      "types": {
+        "CUSTOM": 6,
+        "TEXT_MESSAGE_START": 5,
+        "TEXT_MESSAGE_CONTENT": 594,
+        "TEXT_MESSAGE_END": 5
+      },
+      "nativeHistoryRoles": [
+        "system",
+        "user",
+        "assistant",
+        "user",
+        "assistant",
+        "user",
+        "assistant",
+        "user",
+        "assistant"
+      ],
+      "privateReasoningContentExposed": false
+    }
+  },
+  "assets": [
+    {
+      "path": "docs/assets/conversation-streaming-home.png",
+      "sha256": "ba9ba7675f8cfc80effee4837f3e1a81ac7a258d9d4e1c13e9f4255ee20b13c7",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      }
+    },
+    {
+      "path": "docs/assets/conversation-streaming-mobile.png",
+      "sha256": "ee86aefeb531b983a9dafcb825d84c40b57c1cbbb1268b70d6845eb770c64589",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      }
+    },
+    {
+      "path": "docs/assets/conversation-streaming-answer.png",
+      "sha256": "a2a9d74220e35c82ac81d9a91acb34b86fb57b21fb11d3fe3a9cb41bc09ccd50",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      }
+    }
+  ],
+  "checksRun": [
+    "Node and pnpm versions",
+    "node --check on 3 private .mjs validation scripts",
+    "playwright-cli named-session run-code: first, remaining, settled-mobile scenarios",
+    "Private native JSONL/public SQL result ID and content equality verification for all 4 completed assistant messages",
+    "All 610 retained Redis activity envelopes validated with strict ActivityEnvelopeSchema; 594 text deltas and 6 reasoning status markers, no private reasoning payload",
+    "All 5 native disposals joined and SQL attempt stopped_at populated",
+    "PNG dimensions via sips and visual review of all 3 screenshots",
+    "Owned listener/container/browser cleanup verification"
+  ],
+  "limitations": [
+    "No live Tavily search: no search key provided or manually accessed; text-v1 has no tools.",
+    "No full repository suite, production deployment, commit, push, formatter, linter, or typecheck run by this artifact-only subagent; parent owns repository CI.",
+    "No second-account or other-user page visited; logout and anonymous access/cache clearing tested only on the owned account.",
+    "Observer disconnect/reconnect fault injection not run here; parent owns that separate test.",
+    "Screenshots show settled real model UI; incremental output is proved by browser/SQL observations, not a synthetic or staged screenshot.",
+    "Initial immediate mobile measurement preceded React media-query state settlement; replaced with condition-awaited 390x844 metrics and screenshot.",
+    "One mobile auth selector attempt failed because two Sign in buttons matched; narrowed to the native dialog and reran successfully.",
+    "Native receipt equality applies to 4 completed messages; cancelled receipt had no finalized assistant messages."
+  ],
+  "cleanup": {
+    "namedBrowserSessionClosed": true,
+    "ownedContainersRemoved": true,
+    "ownedListenersClosed": true,
+    "privateBridgeAndNativeHistoryDeleted": true,
+    "privateRootMode": "0700",
+    "privateHandoff": "sanitized summary only",
+    "otherAgentResourcesUntouched": true
+  }
+}

@@ -85,7 +85,8 @@ it('authenticates before validating or accessing scoped resources', async () => 
 
 it('persists acceptance and ordered input and replays without a second outbox entry', async () => {
   const created = await thread();
-  expect(Object.keys(created).sort()).toEqual(['createdAt', 'harness', 'id']);
+  expect(Object.keys(created).sort()).toEqual(['createdAt', 'harness', 'id', 'tools']);
+  expect(created.tools).toEqual([]);
   const requestId = randomUUID();
   const accepted = await submit(created.id, requestId);
   expect(accepted).toMatchObject({ threadId: created.id, status: 'accepted', input });
@@ -256,4 +257,44 @@ it('keeps database failure details private and rolls acceptance back', async () 
   expect(response.status).toBe(500);
   expect(await response.json()).toEqual({ code: 'internal_error' });
   expect(await fixture.database.selectFrom('turns').selectAll().execute()).toEqual([]);
+});
+
+it('lists authenticated owner summaries without changing the thread detail contract', async () => {
+  expect((await request('/threads?after=bad', 'GET', undefined, null)).status).toBe(401);
+  expect((await request('/threads?after=bad')).status).toBe(400);
+  const created = await thread();
+  const foreign = await request('/threads', 'POST', undefined, 'bob');
+  const foreignThread = (await foreign.json()) as Thread;
+  await submit(created.id);
+  const response = await request('/threads?ownerId=bob');
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({
+    threads: [{ ...created, title: 'First second' }],
+    nextCursor: null,
+  });
+  expect(await (await request(`/threads/${created.id}`)).json()).toEqual(created);
+  for (const after of [foreignThread.id, randomUUID()]) {
+    const missing = await request(`/threads?after=${after}`);
+    expect(missing.status).toBe(404);
+    expect(await missing.json()).toEqual({ code: 'not_found' });
+  }
+});
+
+it('returns bounded thread pages and private list failure responses', async () => {
+  for (let index = 0; index < 26; index++) await thread();
+  const response = await request('/threads');
+  expect(response.status).toBe(200);
+  const page = (await response.json()) as { threads: Thread[]; nextCursor: string };
+  expect(page.threads).toHaveLength(25);
+  expect(page.nextCursor).toBe(page.threads.at(-1)?.id);
+  const next = await request(`/threads?after=${page.nextCursor}`);
+  expect(next.status).toBe(200);
+  const tail = (await next.json()) as { threads: Thread[]; nextCursor: null };
+  expect(tail.threads).toHaveLength(1);
+  expect(tail.nextCursor).toBeNull();
+  expect(page.threads.map((thread) => thread.id)).not.toContain(tail.threads[0]?.id);
+  await fixture.pool.query('drop table turn_outbox; drop table turn_attempts; drop table turns');
+  const failure = await request('/threads');
+  expect(failure.status).toBe(500);
+  expect(await failure.json()).toEqual({ code: 'internal_error' });
 });

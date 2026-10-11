@@ -24,14 +24,15 @@ docker run --rm -p 127.0.0.1:3000:3000 multi-harness-server:local
 
 默认 `AGENT_BACKEND_ENABLED=0`：Server 只提供 `/healthz`，Worker 不连接基础设施或读取原生凭据并退出。启用后端须分别注入：
 
-- Server：数据库、Redis producer、Better Auth secret / 根 URL、同一 Pi binding；拥有 HTTP、发布任务与全部进程资源。
-- Worker：数据库、Redis consumer、相同 binding、显式 Pi API key、绝对 `PI_STATE_ROOT` 与有界 deadline；拥有执行与 joined drain，不发布 outbox。
+- Server：数据库、Redis producer / SSE reader、Better Auth secret / 根 URL、同一 Pi binding；拥有 HTTP、发布任务与全部进程资源。
+- Worker：数据库、Redis consumer / activity writer、相同 binding、显式 Pi API key、绝对 `PI_STATE_ROOT` 与有界 deadline；拥有执行与 joined drain，不发布 outbox。
+- `PI_POLICY` 在 Server / Worker 均默认 `text-v1`，须一致。可选 `web-search-v1` 只在 Worker 私下注入 `TAVILY_API_KEY`；host 策略与工具配置不一致则拒绝。旧 Thread 不随环境配置静默升级，binding 不匹配须 reconciliation。
 - 数据库迁移：由独立部署动作运行，不由应用隐式执行。
 
 容器内的 `127.0.0.1` 不是宿主机或其他容器；启用模式需要实际的私有网络连接 URL，不能直接复用示例宿主机 URL。生产公开 origin 要与 `BETTER_AUTH_URL` 一致，Thread / Turn 写请求缺失或外来 Origin 会被拒绝。公开注册默认关闭；单进程内存限流也不等于多副本统一账号准入。
 
 Worker 镜像为非 root 创建权限 0700 的 `/var/lib/multi-harness/pi`；生产应挂载持久、私有且具有明确 writer owner 的状态卷。`PI_STORAGE_ID` 必须对应真实物理存储身份；不能让不同磁盘冒用同一身份，也不能把它当成物理 fencing。当前没有自动 crash takeover。
 
-Web 构建输出为 `apps/web/dist/`。静态托管、同源 `/api` 路由和会话 UI 尚未接入；浏览器 smoke 仅覆盖 liveness。`.dockerignore` 排除真实 `.env`、依赖和测试输出；镜像构建不注入模型或 sandbox 凭据。
+Web 构建输出为 `apps/web/dist/`，会话 UI 已接入同源 `/api` 开发代理；生产静态托管与网关仍须独立部署验收。网关需支持 cookie 认证 SSE、不缓冲增量响应及合理连接超时；关闭浏览器连接不取消 Worker。Redis 活动使用 `MAXLEN ~ 2048` 与写入时续期的 24 小时 TTL，不是永久 transcript；BullMQ 通知与 PostgreSQL 正式结果不变。`.dockerignore` 排除真实 `.env`、依赖和测试输出；镜像构建不注入模型或 sandbox 凭据。
 
-Docker 只是发布载体，不是对不可信工具的隔离保证。当前 text-v1 host 不开放 shell / filesystem tools 或动态资源发现。云端 IaC、生产高可用、租户 / OS 隔离、共享状态物理 fencing、凭据代理与恢复流程尚未验收；本地集成、镜像构建或健康响应都不能代替这些保证。
+Docker 只是发布载体，不是对不可信工具的隔离保证。默认 text-v1 没有业务工具；web-search-v1 仅开放受限只读搜索，两者均不开放 shell / filesystem tools 或动态资源发现。云端 IaC、生产高可用、租户 / OS 隔离、共享状态物理 fencing、凭据代理与恢复流程尚未验收；本地集成、镜像构建或健康响应都不能代替这些保证。

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import {
   type AssistantMessage,
   type BaseEvent,
@@ -12,6 +13,7 @@ import type {
   AgentSessionEvent,
   SessionEntry,
 } from '@earendil-works/pi-coding-agent';
+import type { ActivityChannel } from '../activity-channel.js';
 
 import type { HarnessTurnResult } from '../contract.js';
 
@@ -19,6 +21,7 @@ export interface CreateRunEventsOptions {
   threadId: string;
   runId: string;
   result: Promise<HarnessTurnResult>;
+  activity?: ActivityChannel;
 }
 
 interface RunObservation {
@@ -30,14 +33,81 @@ interface RunObservation {
 export function subscribeRun(
   session: AgentSession,
   onOperationStart: () => void,
+  activity?: ActivityChannel,
+  publicTools: readonly string[] = [],
 ): {
   observation: RunObservation;
   unsubscribe: () => void;
 } {
   const observation: RunObservation = { lastAssistant: undefined, aborted: false };
-  const unsubscribe = session.subscribe((event) =>
-    observeEvent(event, observation, onOperationStart),
-  );
+  let messageId: string | undefined;
+  const emit = (event: Event) => activity?.push(event);
+  const process = (name: 'reasoning' | 'compaction' | 'retry', status: 'started' | 'finished') =>
+    emit({ type: EventType.CUSTOM, name, value: { status } });
+  const unsubscribe = session.subscribe((event) => {
+    // SDK listeners are not fail-isolated. Neither observation nor projection may escape.
+    try {
+      observeEvent(event, observation, onOperationStart);
+    } catch {
+      /* native owns execution */
+    }
+    try {
+      if (event.type === 'message_update') {
+        const delta = event.assistantMessageEvent;
+        if (delta.type === 'text_delta' && delta.delta !== '') {
+          if (messageId === undefined) {
+            messageId = randomUUID();
+            emit({ type: EventType.TEXT_MESSAGE_START, messageId, role: 'assistant' });
+          }
+          emit({ type: EventType.TEXT_MESSAGE_CONTENT, messageId, delta: delta.delta });
+        }
+        if (delta.type === 'thinking_start') process('reasoning', 'started');
+        if (delta.type === 'thinking_end') process('reasoning', 'finished');
+      }
+      if (
+        event.type === 'message_end' &&
+        event.message.role === 'assistant' &&
+        messageId !== undefined
+      ) {
+        emit({ type: EventType.TEXT_MESSAGE_END, messageId });
+        messageId = undefined;
+      }
+      if (event.type === 'compaction_start') process('compaction', 'started');
+      if (event.type === 'compaction_end') process('compaction', 'finished');
+      if (event.type === 'auto_retry_start') process('retry', 'started');
+      if (event.type === 'auto_retry_end') process('retry', 'finished');
+      if (event.type === 'tool_execution_start') {
+        emit({
+          type: EventType.TOOL_CALL_START,
+          toolCallId: event.toolCallId,
+          toolCallName: event.toolName,
+        });
+        // Call generation is complete before native execution starts.
+        emit({ type: EventType.TOOL_CALL_END, toolCallId: event.toolCallId });
+      }
+      if (event.type === 'tool_execution_end') {
+        let content = event.isError ? 'Tool failed.' : 'Tool finished.';
+        if (!event.isError && publicTools.includes(event.toolName)) {
+          const result = event.result as { content?: { type: string; text?: string }[] };
+          let text = '';
+          for (const part of result.content ?? []) {
+            if (part.type === 'text') text += (part.text ?? '').slice(0, 8192 - text.length);
+            if (text.length >= 8192) break;
+          }
+          content = text || content;
+        }
+        emit({
+          type: EventType.TOOL_CALL_RESULT,
+          messageId: randomUUID(),
+          toolCallId: event.toolCallId,
+          content,
+          role: 'tool',
+        });
+      }
+    } catch {
+      /* public projection must never break prompt() */
+    }
+  });
   return { observation, unsubscribe };
 }
 
@@ -53,22 +123,51 @@ export function toRunStatus(observation: RunObservation): HarnessTurnResult['sta
 }
 
 /** Observes settlement without driving or cancelling the native invocation. */
-export async function* createRunEvents(options: CreateRunEventsOptions): AsyncGenerator<BaseEvent> {
+export function createRunEvents(options: CreateRunEventsOptions): AsyncGenerator<BaseEvent> {
+  const events = observeRunEvents(options);
+  const finish = events.return.bind(events);
+  events.return = async (value) => {
+    await options.activity?.events.return?.();
+    return finish(value);
+  };
+  return events;
+}
+
+async function* observeRunEvents(options: CreateRunEventsOptions): AsyncGenerator<BaseEvent> {
   const identity = { threadId: options.threadId, runId: options.runId };
   void options.result.catch(() => undefined);
-  yield { type: EventType.RUN_STARTED, ...identity };
   let terminal: Event;
 
   try {
-    // This slice delivers settled full text; it does not promise native token streaming.
-    const result = await options.result;
-    yield* toFinalMessageEvents(result.messages);
+    yield { type: EventType.RUN_STARTED, ...identity };
+    let streamed = false;
+    if (options.activity !== undefined) {
+      for await (const event of options.activity.events) {
+        if (event.type === EventType.TEXT_MESSAGE_CONTENT) streamed = true;
+        yield event;
+      }
+    }
+    if (options.activity?.abandoned) return;
+    const result = await Promise.race([
+      options.result,
+      ...(options.activity === undefined ? [] : [options.activity.abandonedPromise]),
+    ]);
+    if (options.activity?.abandoned || result === undefined) return;
+    if (!streamed) yield* toFinalMessageEvents(result.messages);
     terminal = { type: EventType.RUN_FINISHED, ...identity, outcome: toRunOutcome(result.status) };
   } catch {
-    terminal = await options.result.then<Event, Event>(
+    const failure = options.result.then<Event, Event>(
       () => ({ type: EventType.RUN_ERROR, message: 'Pi event observation failed' }),
       () => ({ type: EventType.RUN_ERROR, message: 'Pi run failed' }),
     );
+    const observed = await Promise.race([
+      failure,
+      ...(options.activity === undefined ? [] : [options.activity.abandonedPromise]),
+    ]);
+    if (options.activity?.abandoned || observed === undefined) return;
+    terminal = observed;
+  } finally {
+    await options.activity?.events.return?.();
   }
 
   yield terminal;
@@ -106,6 +205,8 @@ function observeEvent(
     case 'agent_settled':
       observation.aborted = event.aborted;
       return;
+    default:
+      return; // Other native events are not execution receipts.
   }
 }
 
@@ -113,7 +214,12 @@ function toTextMessage(
   entry: Extract<SessionEntry, { type: 'message' }>,
 ): AssistantMessage | undefined {
   // Keep failures in native history without publishing retry fragments as successful answers.
-  if (entry.message.role !== 'assistant' || entry.message.stopReason === 'error') return undefined;
+  if (
+    entry.message.role !== 'assistant' ||
+    entry.message.stopReason === 'error' ||
+    entry.message.stopReason === 'aborted'
+  )
+    return undefined;
   let content = '';
   for (const part of entry.message.content) {
     if (part.type === 'text') content += part.text;
@@ -150,5 +256,7 @@ function toRunOutcome(status: HarnessTurnResult['status']): RunFinishedOutcome {
       return { type: 'cancelled' };
     case 'paused':
       return { type: 'interrupt', interrupts: [] };
+    default:
+      throw new Error('Unsupported public run outcome');
   }
 }

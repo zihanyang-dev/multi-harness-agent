@@ -30,6 +30,7 @@ async function main() {
     binding: config.binding,
     stateRoot: config.stateRoot,
     modelRuntime,
+    ...(config.webSearch ? { webSearch: config.webSearch } : {}),
   });
   const pool = new Pool({
     connectionString: config.databaseURL,

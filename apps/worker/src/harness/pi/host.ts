@@ -13,14 +13,19 @@ import { createPiHarness, type PiSessionConfig } from '@multi-harness/harness/pi
 import { type PiBinding, PiBindingSchema } from '@multi-harness/protocol/execution';
 import { z } from 'zod';
 import type { PiTurnHost } from '../../contract.js';
+import { createWebSearchTool, type WebSearchOptions } from './web-search.js';
 
-/** Captures the binding and borrows the native runtime for the text-v1 policy. */
+/** Snapshots reviewed identity/policy; the borrowed SDK owns the loop, history and compaction. */
 export function createPiTurnHost(options: {
   binding: PiBinding;
   stateRoot: string;
   modelRuntime: ModelRuntime;
+  webSearch?: WebSearchOptions;
 }): PiTurnHost {
   const binding = Object.freeze(PiBindingSchema.parse(options.binding));
+  if ((binding.policy === 'web-search-v1') !== (options.webSearch !== undefined))
+    throw new Error('Pi search policy and private tool configuration must agree');
+  const webSearchTool = options.webSearch ? createWebSearchTool(options.webSearch) : undefined;
   if (!isAbsolute(options.stateRoot)) throw new Error('Pi stateRoot must be absolute and private');
   const stateRoot = resolve(options.stateRoot);
   const modelRuntime = options.modelRuntime;
@@ -36,7 +41,15 @@ export function createPiTurnHost(options: {
       const cwd = join(threadRoot, 'workspace');
       const harness = createPiHarness({
         resumable: true,
-        open: () => openNativeSession({ threadRoot, cwd, nativeSessionId, modelRuntime, model }),
+        open: () =>
+          openNativeSession({
+            threadRoot,
+            cwd,
+            nativeSessionId,
+            modelRuntime,
+            model,
+            webSearchTool,
+          }),
       });
       return harness.openSession({
         cwd,
@@ -52,6 +65,7 @@ async function openNativeSession(options: {
   nativeSessionId: string | undefined;
   modelRuntime: ModelRuntime;
   model: Model<Api>;
+  webSearchTool: ReturnType<typeof createWebSearchTool> | undefined;
 }): Promise<PiSessionConfig> {
   const { threadRoot, cwd, nativeSessionId, modelRuntime, model } = options;
   const sessionsDir = join(threadRoot, 'sessions');
@@ -97,12 +111,14 @@ async function openNativeSession(options: {
     settingsManager,
     resourceLoader,
     sessionManager,
-    tools: [],
+    tools: options.webSearchTool ? ['web_search'] : [],
+    customTools: options.webSearchTool ? [options.webSearchTool] : [],
   });
 
   // Transfer disposal to the adapter, which joins its prompt before releasing the session.
   return {
     session,
+    publicTools: options.webSearchTool ? ['web_search'] : [],
     promptOptions: { expandPromptTemplates: false },
     dispose: () => session.dispose(),
   };

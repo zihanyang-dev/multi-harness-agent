@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import {
   type AssistantMessage,
   type BaseEvent,
@@ -19,6 +20,9 @@ export interface CreateRunEventsOptions {
 }
 
 type TextMessages = Map<string, 'open' | 'closed'>;
+interface ProcessObservation {
+  reasoning: boolean;
+}
 
 /** Observes a non-cancelling native iterator and waits for the execution result. */
 export async function* createRunEvents(
@@ -27,6 +31,7 @@ export async function* createRunEvents(
 ): AsyncGenerator<BaseEvent> {
   const identity = { threadId: options.threadId, runId: options.runId };
   const messages: TextMessages = new Map();
+  const process: ProcessObservation = { reasoning: false };
   // SDK run items accumulate across resumes; prior observations must not reopen on this attempt.
   for (const id of options.previousMessageIds ?? []) messages.set(id, 'closed');
   let terminal: Event;
@@ -37,7 +42,7 @@ export async function* createRunEvents(
 
   try {
     for await (const event of events) {
-      yield* toEvents(event, messages);
+      yield* toEvents(event, messages, process);
     }
 
     // EOF does not prove SDK settlement; persistence or guardrails may still be pending.
@@ -77,11 +82,15 @@ export function toMessages(
   return messages;
 }
 
-function toEvents(event: RunStreamEvent, messages: TextMessages): Event[] {
+function toEvents(
+  event: RunStreamEvent,
+  messages: TextMessages,
+  process: ProcessObservation,
+): Event[] {
   // Route SDK event families here; each converter owns its full observation transition.
   switch (event.type) {
     case 'raw_model_stream_event':
-      return toModelEvents(event.data, messages);
+      return toModelEvents(event.data, messages, process);
     case 'run_item_stream_event':
       return toItemEvents(event.item, messages);
     case 'agent_updated_stream_event':
@@ -89,7 +98,32 @@ function toEvents(event: RunStreamEvent, messages: TextMessages): Event[] {
   }
 }
 
-function toModelEvents(data: StreamEvent, messages: TextMessages): Event[] {
+function toModelEvents(
+  data: StreamEvent,
+  messages: TextMessages,
+  process: ProcessObservation,
+): Event[] {
+  // Raw reasoning and public summaries share SDK routing. Observe lifecycle only, never text.
+  if (data.type === 'model') {
+    const type: unknown = data.event?.type;
+    if (
+      type === 'response.reasoning_text.delta' ||
+      type === 'response.reasoning_summary_text.delta'
+    ) {
+      if (process.reasoning) return [];
+      process.reasoning = true;
+      return [{ type: EventType.CUSTOM, name: 'reasoning', value: { status: 'started' } }];
+    }
+    if (
+      type === 'response.reasoning_text.done' ||
+      type === 'response.reasoning_summary_text.done'
+    ) {
+      if (!process.reasoning) return [];
+      process.reasoning = false;
+      return [{ type: EventType.CUSTOM, name: 'reasoning', value: { status: 'finished' } }];
+    }
+    return [];
+  }
   // Use normalized SDK text deltas, not provider-specific frames or hidden model metadata.
   if (data.type !== 'output_text_delta' || data.delta === '') return [];
   const messageId = data.itemId;
@@ -105,6 +139,27 @@ function toModelEvents(data: StreamEvent, messages: TextMessages): Event[] {
 }
 
 function toItemEvents(item: RunItem, messages: TextMessages): Event[] {
+  if (item.type === 'tool_call_item' && item.rawItem.type === 'function_call') {
+    const { callId: toolCallId, name: toolCallName } = item.rawItem;
+    return [
+      { type: EventType.TOOL_CALL_START, toolCallId, toolCallName },
+      { type: EventType.TOOL_CALL_END, toolCallId },
+    ];
+  }
+  if (item.type === 'tool_call_output_item' && item.executionStatus === 'executed') {
+    return [
+      {
+        type: EventType.TOOL_CALL_RESULT,
+        messageId: randomUUID(),
+        toolCallId: item.rawItem.callId,
+        content: 'Tool finished.',
+        role: 'tool',
+      },
+    ];
+  }
+  if (item.type === 'compaction_item') {
+    return [{ type: EventType.CUSTOM, name: 'compaction', value: { status: 'finished' } }];
+  }
   if (item.type !== 'message_output_item') return [];
   const message = toTextMessage(item);
   const messageId = item.rawItem.id;

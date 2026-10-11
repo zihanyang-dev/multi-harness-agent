@@ -4,7 +4,9 @@
 
 ## 1. 范围和 owner
 
-首轮后端链路为：认证后的 Thread／Turn API → PostgreSQL 持久接受 → outbox → BullMQ → Worker → 现有 Pi adapter → 正式结果入库。Web、SSE、文件、业务工具、E2B、完整审批、自动 crash recovery 不在这一轮。Pi 当前公开回答为结算完整文本，不冒充 token stream。
+首轮（历史）后端链路为：认证后的 Thread／Turn API → PostgreSQL 持久接受 → outbox → BullMQ → Worker → 现有 Pi adapter → 正式结果入库。Web、SSE、文件、业务工具、E2B、完整审批、自动 crash recovery 不在这一轮。当时 Pi 公开回答为结算完整文本，不冒充 token stream。
+
+后续已增加 React / Tailwind 会话 UI、owner-scoped Thread 列表、Redis Streams → 授权 Server SSE → native EventSource，以及可选只读搜索策略。这些观察能力不改变以下执行权与未知阻塞规则。此前真实模型矩阵属于旧文本实现，不证明新版 SSE／搜索；独立范围和证据见 [会话 UI 与 E2E](conversation-ui.md)。
 
 - PostgreSQL：用户归属、不可变请求、执行 claim、控制意图、正式输出与终态。
 - BullMQ：引用型执行通知与领取；Redis 的 job 状态不决定产品成功。
@@ -51,12 +53,18 @@ Pi `SessionManager` 是原生持久 history 的 owner。按授权的精确 nativ
 - Thread 同时只接受一个未收尾 Turn；新请求遇 busy 明确拒绝，不建立第二套 prompt backlog。
 - `accepted` 可安全重复通知；已 claim 的执行不因重投、超时或队列锁丢失重启。未知结果占住 Thread admission，等待核对。
 - 一个 Turn 的首轮执行只创建一个 Attempt；不为故障自动创建新 Attempt。持久输入解码确定失败时，在 claim 事务内标记 `needs_reconciliation / invalid_input`，不分配 Attempt、不打开原生会话，也不继续制造失败通知；Thread 仍阻塞。损坏的输入不会被伪造为合法公开 DTO，产品读取仍 fail-closed，运维须核对数据库事实。
-- binding 固定 Pi／SDK 版本、模型、文本策略和 storage scope，不存凭据，不 serialize native graph；不兼容 binding 不执行。
-- 第一版 host 是明确受限的文本策略，不开放本地 shell／filesystem tools／动态 extensions。今后原生工具在经过授权的 host binding 中加入，不改造 adapters 为最低公共能力白名单。
+- binding 固定 Pi／SDK 版本、模型、`policy` 和 storage scope，不存凭据，不 serialize native graph；不兼容 binding 不执行，进入 reconciliation。`PI_POLICY` 在 Server／Worker 默认 `text-v1`；可选 `web-search-v1` 不静默升级旧 Thread。
+- 默认 `text-v1` 没有业务工具；`web-search-v1` 在 Pi native `customTools` 装配 `web_search`，实际 `tools` 与 `publicTools` 均为 `['web_search']`。Worker 私有搜索配置须与 binding 一致，否则 fail-closed；仍不开放本地 shell／filesystem tools／动态 extensions。
 - 正式输出是公开 display messages，native transcript 另存；SDK 异常只作为私有诊断，公共 failure code 不含原始输入或供应商响应。
 - cancellation intent 与 cancelled outcome 分开。已 claim 的 Turn 只有 owned execution 实际收尾后才能释放；completion 可以赢过取消 race。
 - Better Auth 的原生 Origin 检查不代替产品 API 的 CSRF 边界。所有已认证的产品写请求必须带精确可信 Origin，缺失也拒绝；用户归属检查仍独立执行。
 - 默认能力开关关闭；启用后必须有显式 profile、API key 与私有绝对状态目录。拒绝会触发 Vertex ambient ADC 的空白、placeholder 与原生 marker，不通过全局 environment 切换用户凭据。
+
+### 临时观察不是执行权
+
+Worker 将 schema 白名单活动写入 Redis：`MAXLEN ~ 2048`、每次写入续期 24 小时 TTL。Server 的 `GET /turns/:turnId/events` 认证并核对 owner，发送 `turn`／`activity`／`gap`，以 `Last-Event-ID` 恢复 cursor；Lua 原子读取 retention metadata 与 `XREAD COUNT 100`，识别裁剪以及新 `0-0` cursor 的已丢失历史。SQL 快照与终态仍权威，`MESSAGES_SNAPSHOT` 可撤回预览，正式结果替换临时内容。
+
+Pi／Claude native channel 有 256 events／256 KiB 上限；同步 callback 失败隔离，不把存储 await 放进原生 callback。Worker 在 result settled 后最多给 observer 250 ms drain 窗口，Redis 命令有 1 秒上限；观察失败只留下缺口，不取消、重试或改变执行结果。iterator return／overflow 独立唤醒 observer，receipt pending 也不阻塞解除观察。
 
 ## 4. 必须验证的故障窗口
 
@@ -78,7 +86,7 @@ Context7 月额度耗尽；部分直接 fetch 被 fake-IP／SSRF 防护阻断，
 
 本轮使用 Node 24.21.0、独立临时 PostgreSQL 18.6 / Redis 8 和官方 Pi faux 验证真实边界：并发身份／准入、事务 rollback、跨用户不可见、SQL cursor 精度、通知丢失与 retained terminal job、claim fence、合作取消、join 后正式提交、cleanup／未知提交阻塞、原生精确 ID 的两 Turn 跨 host 恢复。原生认证 cookies / session / revocation 和 Server 自身的 HTTP → outbox → 发布生命周期也经过真实集成检查。迁移完成 up → down → down → up 和 PG18 schema dump；没有使用个人凭据或调用付费模型。
 
-这些检查不代表真实进程 crash、网络分区、生产 Redis durability、跨进程 filesystem fencing、OS／企业租户隔离或生产恢复已经验收。中断不能证明 native 停止；未知仍占住 admission，当前无自动 takeover。实时 UI、媒体、成果、E2B 与完整审批路径仍不在本轮范围。
+这些检查不代表真实进程 crash、网络分区、生产 Redis durability、跨进程 filesystem fencing、OS／企业租户隔离或生产恢复已经验收。中断不能证明 native 停止；未知仍占住 admission，当前无自动 takeover。此段记录首轮验证；新版 SSE／搜索须看最新交付记录，媒体、成果、E2B 与完整审批路径仍未实现。
 
 [1]: https://www.postgresql.org/docs/18/transaction-iso.html
 [2]: https://aws.amazon.com/builders-library/making-retries-safe-with-idempotent-APIs/

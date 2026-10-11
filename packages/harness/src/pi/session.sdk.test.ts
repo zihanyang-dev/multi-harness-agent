@@ -1,5 +1,6 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
+import type { TextMessageContentEvent, TextMessageStartEvent } from '@ag-ui/core';
 
 import {
   type FauxResponseFactory,
@@ -57,18 +58,13 @@ it('projects native history text with entry IDs and does not replay old messages
   const entry = history.getLeafEntry();
 
   expect(result.messages).toEqual([{ id: entry?.id, role: 'assistant', content: 'Second' }]);
-  expect(events.map((event) => event.type)).toEqual([
-    'RUN_STARTED',
-    'TEXT_MESSAGE_START',
-    'TEXT_MESSAGE_CONTENT',
-    'TEXT_MESSAGE_END',
-    'RUN_FINISHED',
-  ]);
-  expect(events[2]).toEqual({
-    type: 'TEXT_MESSAGE_CONTENT',
-    messageId: entry?.id,
-    delta: 'Second',
-  });
+  expect(events[0]).toMatchObject({ type: 'RUN_STARTED' });
+  expect(events.at(-1)).toMatchObject({ type: 'RUN_FINISHED' });
+  const chunks = events.filter((event) => event.type === 'TEXT_MESSAGE_CONTENT');
+  expect(chunks.map((event) => (event as TextMessageContentEvent).delta).join('')).toBe('Second');
+  const streamingId = (events[1] as TextMessageStartEvent).messageId;
+  expect(streamingId).not.toBe(entry?.id);
+  expect(events.at(-2)).toMatchObject({ type: 'TEXT_MESSAGE_END', messageId: streamingId });
 });
 
 it('keeps native tools and runs the genuine tool-result loop', async () => {
@@ -459,6 +455,44 @@ it('closing the event iterator leaves the native invocation running', async () =
   release.resolve();
 
   expect((await run.result).status).toBe('completed');
+});
+
+it('delivers native text while the owned prompt is pending, and observer overflow cannot break callbacks', async () => {
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const extension: ExtensionFactory = (pi) => {
+    pi.on('agent_end', async () => {
+      entered.resolve();
+      await release.promise;
+    });
+  };
+  const { faux, session } = await setup({ extensions: [extension] });
+  faux.setResponses([fauxAssistantMessage('Pending text')]);
+  const run = await session.run({ content: [] });
+  const events = run.events[Symbol.asyncIterator]();
+  expect((await events.next()).value).toMatchObject({ type: 'RUN_STARTED' });
+  expect((await events.next()).value).toMatchObject({ type: 'TEXT_MESSAGE_START' });
+  expect((await events.next()).value).toMatchObject({ type: 'TEXT_MESSAGE_CONTENT' });
+  await entered.promise;
+  let settled = false;
+  void run.result.then(() => {
+    settled = true;
+  });
+  await Promise.resolve();
+  expect(settled).toBe(false);
+  await events.return?.();
+  release.resolve();
+  expect((await run.result).messages[0]?.content).toBe('Pending text');
+
+  faux.setResponses([fauxAssistantMessage('word '.repeat(400))]);
+  const overflow = await session.run({ content: [] });
+  expect((await overflow.result).status).toBe('completed');
+  const projected = [];
+  for await (const event of overflow.events) projected.push(event);
+  expect(projected.at(-1)).toMatchObject({
+    type: 'RUN_ERROR',
+    message: 'Pi event observation failed',
+  });
 });
 
 async function setup(

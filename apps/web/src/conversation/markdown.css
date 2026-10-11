@@ -1,0 +1,70 @@
+.markdown p {
+  margin: 0 0 16px;
+}
+.markdown p:last-child {
+  margin-bottom: 0;
+}
+.markdown h1,
+.markdown h2,
+.markdown h3 {
+  font-weight: 600;
+  margin: 20px 0 12px;
+}
+.markdown h1 {
+  font-size: 24px;
+}
+.markdown h2 {
+  font-size: 21px;
+}
+.markdown h3 {
+  font-size: 18px;
+}
+.markdown ul,
+.markdown ol {
+  padding-left: 24px;
+  margin: 12px 0;
+}
+.markdown ul {
+  list-style: disc;
+}
+.markdown ol {
+  list-style: decimal;
+}
+.markdown a {
+  color: #3158a1;
+  text-decoration: underline;
+}
+.markdown pre {
+  overflow: auto;
+  padding: 16px;
+  border-radius: 12px;
+  background: #f5f5f5;
+  margin: 16px 0;
+  font-size: 14px;
+}
+.markdown code {
+  background: #f5f5f5;
+  border-radius: 4px;
+  padding: 2px 4px;
+  font-size: 14px;
+}
+.markdown pre code {
+  padding: 0;
+}
+.markdown table {
+  display: block;
+  overflow-x: auto;
+  border-collapse: collapse;
+  margin: 16px 0;
+}
+.markdown td,
+.markdown th {
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+}
+.markdown blockquote {
+  padding-left: 16px;
+  border-left: 3px solid #ddd;
+  color: #666;
+  margin: 16px 0;
+}

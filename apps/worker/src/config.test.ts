@@ -45,3 +45,28 @@ it('requires explicit credentials and absolute durable storage with a bounded wh
   expect(() => config.readWorkerConfig({ ...environment, PI_API_KEY: '' })).toThrow();
   expect(() => config.readWorkerConfig({ ...environment, TURN_MAX_RUN_MS: '0' })).toThrow();
 });
+
+it('requires a private search key only for the explicit immutable web search policy', () => {
+  const environment = {
+    AGENT_BACKEND_ENABLED: '1',
+    DATABASE_URL: 'postgresql://localhost/agent',
+    REDIS_URL: 'redis://localhost:6379',
+    PI_PROVIDER: 'openai',
+    PI_MODEL: 'configured-model',
+    PI_STORAGE_ID: 'private-volume',
+    PI_STATE_ROOT: '/private/agent',
+    PI_API_KEY: 'model-key',
+  };
+  expect(() => config.readWorkerConfig({ ...environment, PI_POLICY: 'web-search-v1' })).toThrow();
+  expect(
+    config.readWorkerConfig({
+      ...environment,
+      PI_POLICY: 'web-search-v1',
+      TAVILY_API_KEY: ' search-key ',
+    }),
+  ).toMatchObject({ binding: { policy: 'web-search-v1' }, webSearch: { apiKey: 'search-key' } });
+  expect(
+    config.readWorkerConfig({ ...environment, TAVILY_API_KEY: 'unused-key' })?.webSearch,
+  ).toBeUndefined();
+  expect(() => config.readWorkerConfig({ ...environment, PI_POLICY: 'unknown' })).toThrow();
+});

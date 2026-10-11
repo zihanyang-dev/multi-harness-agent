@@ -1,17 +1,25 @@
+import type { HttpBindings } from '@hono/node-server';
 import { zValidator } from '@hono/zod-validator';
 import type { Database } from '@multi-harness/database';
 import { type PiBinding, PiBindingSchema } from '@multi-harness/protocol/execution';
 import { SubmitTurnSchema } from '@multi-harness/protocol/http';
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
+import { streamSSE } from 'hono/streaming';
 import { z } from 'zod';
 import { requestCancellation } from '../db/cancellations.js';
 import { getTurn, listTurns } from '../db/conversation-history.js';
 import { acceptTurn } from '../db/submissions.js';
-import { createThread, getThread } from '../db/threads.js';
+import { createThread, getThread, listThreads } from '../db/threads.js';
+import {
+  type ActivityStreamOptions,
+  streamTurnActivity,
+  validActivityCursor,
+} from './activity-stream.js';
 
 export interface ConversationApiOptions {
   database: Database;
+  activity?: ActivityStreamOptions;
   binding: PiBinding;
   trustedOrigin: string;
   getOwnerId: (request: Request) => Promise<string | undefined>;
@@ -34,10 +42,10 @@ const historyQuery = zValidator(
 /** Trusted authentication supplies the owner; public bodies never select an execution binding. */
 export function createConversationApi(
   options: ConversationApiOptions,
-): Hono<{ Variables: { ownerId: string } }> {
+): Hono<{ Bindings: HttpBindings; Variables: { ownerId: string } }> {
   const { database, getOwnerId, trustedOrigin } = options;
   const binding = PiBindingSchema.parse(options.binding);
-  const api = new Hono<{ Variables: { ownerId: string } }>();
+  const api = new Hono<{ Bindings: HttpBindings; Variables: { ownerId: string } }>();
 
   api.onError((_error, context) => context.json({ code: 'internal_error' }, 500));
   api.use('*', async (context, next) => {
@@ -63,6 +71,14 @@ export function createConversationApi(
   api.post('/threads', async (context) => {
     const thread = await createThread(database, { ownerId: context.get('ownerId'), binding });
     return context.json(thread, 201);
+  });
+  api.get('/threads', historyQuery, async (context) => {
+    const { after } = context.req.valid('query');
+    const page = await listThreads(database, {
+      ownerId: context.get('ownerId'),
+      ...(after === undefined ? {} : { after }),
+    });
+    return page === undefined ? context.json({ code: 'not_found' }, 404) : context.json(page);
   });
   api.get('/threads/:threadId', threadParams, async (context) => {
     const thread = await getThread(database, {
@@ -104,6 +120,34 @@ export function createConversationApi(
       ...context.req.valid('param'),
     });
     return turn === undefined ? context.json({ code: 'not_found' }, 404) : context.json(turn);
+  });
+  api.get('/turns/:turnId/events', turnParams, async (context) => {
+    const cursor = context.req.header('Last-Event-ID') ?? '0-0';
+    if (!validActivityCursor(cursor)) return context.json({ code: 'invalid_request' }, 400);
+    const turn = await getTurn(database, {
+      ownerId: context.get('ownerId'),
+      ...context.req.valid('param'),
+    });
+    if (turn === undefined) return context.json({ code: 'not_found' }, 404);
+    if (options.activity === undefined) return context.json({ code: 'activity_unavailable' }, 503);
+    const activity = options.activity;
+    return streamSSE(context, (stream) =>
+      streamTurnActivity(stream, {
+        ...activity,
+        database,
+        getOwnerId,
+        request: context.req.raw,
+        ownerId: context.get('ownerId'),
+        turn,
+        cursor,
+        // Healthy readers receive graceful EOF; only stalled native writes need socket release.
+        // App.request has no Node bindings, unlike the production HTTP adapter.
+        disconnect: () => {
+          const outgoing = context.env?.outgoing;
+          if (outgoing?.writableNeedDrain) outgoing.destroy();
+        },
+      }),
+    );
   });
   api.post('/turns/:turnId/cancel', turnParams, async (context) => {
     const turn = await requestCancellation(database, {

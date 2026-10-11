@@ -7,8 +7,14 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:3000',
+        target: process.env.WEB_API_PROXY_TARGET ?? 'http://127.0.0.1:3000',
         rewrite: (path) => path.replace(/^\/api/, ''),
+        configure(proxy) {
+          // Forward truncation too: an open downstream SSE would prevent native reconnect.
+          proxy.on('proxyRes', (upstream, _request, downstream) => {
+            upstream.once('aborted', () => downstream.destroy());
+          });
+        },
       },
     },
   },
