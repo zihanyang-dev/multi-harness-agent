@@ -20,5 +20,9 @@ EXPOSE 3000
 CMD ["node", "dist/main.js"]
 
 FROM runtime AS worker
+USER root
+RUN mkdir -p /var/lib/multi-harness/pi && chown node:node /var/lib/multi-harness/pi && chmod 0700 /var/lib/multi-harness/pi
+USER node
+ENV PI_STATE_ROOT=/var/lib/multi-harness/pi
 COPY --from=build --chown=node:node /out/worker/ ./
 CMD ["node", "dist/main.js"]

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ExecuteTurnJobSchema } from './execute-turn-job.js';
+import { ExecuteTurnJobSchema } from './execution.js';
 
 describe('ExecuteTurnJobSchema', () => {
   it('accepts a stable turn reference without copying user content', () => {

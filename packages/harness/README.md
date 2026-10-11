@@ -1,6 +1,6 @@
 # Harness 接入
 
-生产执行与评测共享的原生 SDK 接入边界。当前有 OpenAI 原生 adapter、Pi 与 Claude 包级文本 adapter；产品 API、Web 和 Worker 尚未连接 Agent。
+生产执行与评测共享的原生 SDK 接入边界。当前有 OpenAI 原生 adapter、Pi 与 Claude 包级文本 adapter。认证产品 API 已通过 PostgreSQL、outbox、BullMQ 和 Worker 接通 Pi `text-v1` 执行与正式结果落库；Web 仍只有 health 页面，OpenAI 与 Claude 尚未接入这条产品执行路径。已实现不等于生产全量验收，当前边界与验证见 [Thread／Turn 设计](../../docs/thread-turn-design.md)。
 
 版本固定为 Pi 1.1.0、OpenAI Agents SDK 0.20.0、Claude Agent SDK 0.3.295。保留官方 loop、原生 history／RunState、compaction 和能力差异，不编排视频或编码 Workflow，不建立第四执行框架。
 

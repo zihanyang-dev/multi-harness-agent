@@ -4,5 +4,10 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["vitest.config.ts", "playwright.config.ts", "tests/**/*.ts"]
+  "include": [
+    "vitest.config.ts",
+    "vitest.integration.config.ts",
+    "playwright.config.ts",
+    "tests/**/*.ts"
+  ]
 }

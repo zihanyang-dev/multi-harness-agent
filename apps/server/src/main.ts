@@ -1,26 +1,33 @@
-import { serve } from '@hono/node-server';
 import { pino } from 'pino';
-import { createApp } from './app.js';
+
+import { readServerConfig } from './config.js';
+import { startServer } from './server.js';
 
 const logger = pino({ name: 'server', level: process.env.LOG_LEVEL ?? 'info' });
-const app = createApp();
-const server = serve(
-  {
-    fetch: app.fetch,
-    hostname: process.env.HOST ?? '127.0.0.1',
-    port: Number(process.env.PORT ?? 3000),
-  },
-  (address) => logger.info({ port: address.port }, 'HTTP server listening'),
-);
 
-function shutdown() {
-  server.close((error) => {
-    if (error) {
-      logger.error({ err: error }, 'HTTP server shutdown failed');
+async function main() {
+  const server = await startServer(readServerConfig(process.env), logger);
+  const onSignal = () => {
+    void server.close().catch(() => {
+      logger.error('Server shutdown failed');
       process.exitCode = 1;
+    });
+  };
+  process.on('SIGINT', onSignal);
+  process.on('SIGTERM', onSignal);
+  try {
+    await server.finished;
+  } finally {
+    try {
+      await server.close();
+    } finally {
+      process.off('SIGINT', onSignal);
+      process.off('SIGTERM', onSignal);
     }
-  });
+  }
 }
 
-process.once('SIGINT', shutdown);
-process.once('SIGTERM', shutdown);
+main().catch(() => {
+  logger.fatal('Server startup or execution failed');
+  process.exitCode = 1;
+});

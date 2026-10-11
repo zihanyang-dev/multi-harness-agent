@@ -22,17 +22,22 @@
     "lint:fix": "biome check --write .",
     "format": "biome format --write .",
     "test": "vitest run",
+    "test:integration": "pnpm build:packages && vitest run --config vitest.integration.config.ts",
     "test:e2e": "pnpm build:packages && playwright test",
     "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
     "infra:up": "docker compose --project-directory . -f deploy/compose.yaml up -d --wait",
     "infra:down": "docker compose --project-directory . -f deploy/compose.yaml down",
-    "db:migrate": "dbmate --migrations-dir apps/server/migrations --schema-file apps/server/schema.sql up"
+    "db:migrate": "dbmate --migrations-dir packages/database/migrations --schema-file packages/database/schema.sql up"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",
+    "@multi-harness/database": "workspace:*",
     "@playwright/test": "1.64.0",
     "@types/node": "24.19.1",
+    "@types/pg": "8.23.1",
     "dbmate": "2.36.0",
+    "ioredis": "6.0.0",
+    "pg": "8.23.1",
     "tsx": "4.23.15",
     "typescript": "7.0.2",
     "vitest": "5.0.3"
