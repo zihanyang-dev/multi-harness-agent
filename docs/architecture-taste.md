@@ -183,7 +183,7 @@ fail-stop 可以是正确策略，但必须说明为什么无法安全局部隔�
 
 临时输出属于 attempt，正式结果属于 turn。恢复时不把两个 attempt 的半段文字直接拼成一个“原生回答”。事件层不自行补造 SDK 最终结果。订阅退出只停止观察；SDK result、观察收尾与正式结算分别等待，不能把 observer return 当 native cancel。回放裁剪、身份变化或缺口退回可信快照，不能以最大游标静默跨洞。
 
-公开投影使用白名单：当前推理仅显示过程状态，不转发原始 thinking；工具结果默认通用安全提示，只有 host 明确审阅的结果可展示。供应商支持摘要配置不代表自定义 gateway 的载荷自动安全。审批 continuation、hooks 和原生 checkpoint 保留 provider owner，不用一个公共 paused 布尔伪装三种 SDK 的恢复能力。
+公开投影使用白名单：思考内容默认关闭，显式开启时只展示供应商允许公开的文本或摘要；不公开隐藏推理、签名、加密或 redacted 回放状态。活动通知与内容开关分开，不把输出边界当作隐藏推理区间。工具结果默认通用安全提示，只有 host 明确审阅的结果可展示。供应商支持摘要配置不代表自定义 gateway 的载荷自动安全。审批 continuation、hooks 和原生 checkpoint 保留 provider owner，不用一个公共 paused 布尔伪装三种 SDK 的恢复能力。
 
 默认遥测记录状态、耗时、错误类别、预算和恢复事实。原始 prompt、工具载荷和文件内容不默认复制到外部 tracing；供应商 SDK 的默认遥测配置也要审查。[^13]
 

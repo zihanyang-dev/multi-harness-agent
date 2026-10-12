@@ -5,42 +5,16 @@
   "type": "module",
   "exports": {
     ".": {
+      "development": "./index.ts",
       "types": "./dist/index.d.ts",
-      "development": "./src/index.ts",
       "default": "./dist/index.js"
-    },
-    "./claude": {
-      "types": "./dist/claude/adapter.d.ts",
-      "development": "./src/claude/adapter.ts",
-      "default": "./dist/claude/adapter.js"
-    },
-    "./openai": {
-      "types": "./dist/openai/adapter.d.ts",
-      "development": "./src/openai/adapter.ts",
-      "default": "./dist/openai/adapter.js"
-    },
-    "./pi": {
-      "types": "./dist/pi/adapter.d.ts",
-      "development": "./src/pi/adapter.ts",
-      "default": "./dist/pi/adapter.js"
     }
   },
   "files": [
     "dist"
   ],
   "scripts": {
-    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit"
-  },
-  "dependencies": {
-    "@ag-ui/core": "1.0.2",
-    "@anthropic-ai/claude-agent-sdk": "0.3.295",
-    "@earendil-works/pi-ai": "1.1.0",
-    "@earendil-works/pi-coding-agent": "1.1.0",
-    "@openai/agents": "0.20.0"
-  },
-  "devDependencies": {
-    "openai": "7.30.1",
-    "zod": "4.6.5"
   }
 }

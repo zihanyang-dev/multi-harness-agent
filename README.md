@@ -2,9 +2,11 @@
 
 多 harness 的云端通用 Agent 产品基座。直接复用 Pi、OpenAI Agents SDK、Claude Agent SDK，不自行实现 Agent loop，不预定义视频或编码创作流程。
 
-**已有真实认证、文本会话 UI 与第一条 Pi 执行路径；还不是完整云端 Agent 产品。**
+**当前分支正在 contract-first 重建：三应用与旧 SDK adapters 已删除；新的公共合同见 [packages/harness](packages/harness/README.md)，尚无 SDK 运行实现。**
 
-## 已建立
+以下产品路径、开发命令与验收描述保留为删除前的历史基线，不表示当前工作树可运行，也不证明新合同已经通过运行验收。
+
+## 历史基线：曾建立
 
 - pnpm workspace、Node 24.21.0、TypeScript 严格检查、非 root Server / Worker 镜像入口。
 - React / Tailwind CSS / Vite 会话 UI：原生登录、持久侧栏、Thread URL、完整回答、取消、复制与手机布局；`/status` 保留 liveness 查询。
@@ -109,6 +111,5 @@ packages/
 - [后端完整代码审查与修复证据](docs/backend-review.md)
 - [会话 UI、工作流与真实 E2E](docs/conversation-ui.md)
 - [Agent 产品源码研究与能力边界](docs/agent-product-research.md)
-- [OpenAI 接入](packages/harness/src/openai/README.md) / [审查与限制](docs/openai-review.md)
-- [Pi 接入](packages/harness/src/pi/README.md) / [审查与限制](docs/pi-review.md)
-- [Claude 接入](packages/harness/src/claude/README.md) / [审查与限制](docs/claude-review.md)
+- [当前 Harness 公共合同](packages/harness/README.md) / [整体审查](docs/harness-contract-whole-review.md)
+- 历史 [OpenAI 审查](docs/openai-review.md) / [Pi 审查](docs/pi-review.md) / [Claude 审查](docs/claude-review.md)
