@@ -399,30 +399,7 @@ importers:
         specifier: 8.23.1
         version: 8.23.1
 
-  packages/harness:
-    dependencies:
-      '@ag-ui/core':
-        specifier: 1.0.2
-        version: 1.0.2(zod@4.6.5)
-      '@anthropic-ai/claude-agent-sdk':
-        specifier: 0.3.295
-        version: 0.3.295(@anthropic-ai/sdk@0.129.0(zod@4.6.5))(@modelcontextprotocol/sdk@1.32.1(zod@4.6.5))(zod@4.6.5)
-      '@earendil-works/pi-ai':
-        specifier: 1.1.0
-        version: 1.1.0(@aws-sdk/credential-provider-node@3.972.84)(@modelcontextprotocol/sdk@1.32.1(zod@4.6.5))(@smithy/signature-v4@5.7.4)(undici@8.10.2)(ws@8.22.0)(zod@4.6.5)
-      '@earendil-works/pi-coding-agent':
-        specifier: 1.1.0
-        version: 1.1.0(@aws-sdk/credential-provider-node@3.972.84)(@modelcontextprotocol/sdk@1.32.1(zod@4.6.5))(@smithy/signature-v4@5.7.4)(ws@8.22.0)(zod@4.6.5)
-      '@openai/agents':
-        specifier: 0.20.0
-        version: 0.20.0(@aws-sdk/credential-provider-node@3.972.84)(@smithy/signature-v4@5.7.4)(undici@8.10.2)(ws@8.22.0)(zod@4.6.5)
-    devDependencies:
-      openai:
-        specifier: 7.30.1
-        version: 7.30.1(@aws-sdk/credential-provider-node@3.972.84)(@smithy/signature-v4@5.7.4)(undici@8.10.2)(ws@8.22.0)(zod@4.6.5)
-      zod:
-        specifier: 4.6.5
-        version: 4.6.5
+  packages/harness: {}
 
   packages/protocol:
     dependencies:

@@ -2,7 +2,7 @@
 
 > 这是原研究轮次的记录，对[契约重审](harness-native-contract-review.md)作补充，不是运行验收。下文保留当时的候选与证据，不代表当前合同的所有命名。
 >
-> 后续评审明确保留 `text_delta` 和 `messages`，增加 `reasoning_delta`，不采用当时建议的 `content_delta/messages_snapshot`。同时删除 capabilities.updates，功能能力与实际观察事件不再重复声明。对应合同现已调整，当前定义见 [contract.ts](../packages/harness/contract.ts) 与[包说明](../packages/harness/README.md)。SDK 运行层仍未实现。
+> 后续评审明确保留 `text_delta` 和 `messages`，增加 `reasoning_delta`，不采用当时建议的 `content_delta/messages_snapshot`。同时删除 capabilities.updates，功能能力与实际观察事件不再重复声明。对应合同现已调整，当前定义见 [contract.ts](../packages/harness/src/contract.ts) 与[包说明](../packages/harness/README.md)。SDK 运行层仍未实现。
 >
 > 已确认需求：需要执行活动，也需要可展示的思考内容。不能删掉活动来简化类型，也不能只加一个 delta 名字便认为设计完整。
 

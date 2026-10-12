@@ -1,6 +1,8 @@
 # Harness 公共合同重新调研与完整审查
 
-> 本文审查当前 `packages/harness/contract.ts` 的全部 **32 个导出声明**、五个类型用例、公共入口和 README。重新读取固定版本的官方 SDK 源码与开源项目调用链，不把旧研究结论或类型通过当作运行证明。
+> 本文审查当时 `packages/harness/contract.ts` 的全部 **32 个导出声明**、五个类型用例、公共入口和 README。重新读取固定版本的官方 SDK 源码与开源项目调用链，不把旧研究结论或类型通过当作运行证明。
+>
+> 合同现已移至 [`packages/harness/src/contract.ts`](../packages/harness/src/contract.ts)，文件内容未变；本文的旧路径与行号保留为审查时快照。
 >
 > 审查阶段只新增本记录，未修改合同、用例或 README。随后用户批准了定点调整，落实状态见第 10 节；第 3 节和第 8 节保留调整前建议／验证快照。三个 SDK 仍无运行实现，“验收门槛”不是已经发现的 Harness 运行缺陷。
 

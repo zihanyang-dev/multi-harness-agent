@@ -6,5 +6,5 @@
     "customConditions": ["development"],
     "noEmit": true
   },
-  "include": ["*.ts", "examples/**/*.ts"]
+  "include": ["src/**/*.ts", "examples/**/*.ts"]
 }

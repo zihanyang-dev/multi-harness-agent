@@ -2,7 +2,7 @@
 
 > 调研日期：2026-10-12。状态：讨论稿，不是已实现或已定稿的运行合同。
 >
-> 后续第一版类型草案见 [`packages/harness/contract.ts`](../packages/harness/contract.ts)，调用示例见 [Harness README](../packages/harness/README.md)。它选择下文候选 B 供评审；尚无 SDK 实现，也不表示本研究中的能力已验证。
+> 后续第一版类型草案见 [`packages/harness/src/contract.ts`](../packages/harness/src/contract.ts)，调用示例见 [Harness README](../packages/harness/README.md)。它选择下文候选 B 供评审；尚无 SDK 实现，也不表示本研究中的能力已验证。
 >
 > 本轮在 `refactor/harness-contract-first` 分支删除旧 `packages/harness/`、`apps/worker/`、`apps/web/`、`apps/server/`，不以旧调用方作为新接口的兼容约束。数据库、协议、评测、测试和部署配置暂时保留，因此仓库目前不是可构建的完整产品。
 
